@@ -1,0 +1,10 @@
+# 재현성·보안 패치 반영을 위한 하한 버전 (HF Space에서 pip가 상위 호환 범위로 설치)
+fastapi>=0.115.6
+uvicorn[standard]>=0.34.0
+python-multipart>=0.0.18
+pydantic>=2.10.0
+nbformat>=5.10.0
+pymupdf>=1.24.0
+langchain-openai>=0.2.0
+tavily-python>=0.5.0
+python-dotenv>=1.0.1
