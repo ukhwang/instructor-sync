@@ -22,6 +22,12 @@ export const ReportSummarySchema = z.object({
     why: z.string(),
     tip: z.string(),
   })).optional(),
+  /** 갭 0개 시 ‘돌발 질문 디펜스’ 시뮬레이션용 (선택) */
+  defenseDrills: z.array(z.object({
+    metaphor: z.string(),
+    pressureQuestion: z.string(),
+    talkTrack: z.string(),
+  })).optional(),
 });
 
 export type ReportSummary = z.infer<typeof ReportSummarySchema>;
@@ -34,7 +40,11 @@ export interface WebEvidence {
 export interface GapItem {
   id: string;
   chunkIndex: number;
+  cellIndex?: number;
+  pageNumber?: number; // PDF 페이지 번호
+  fileType?: "ipynb" | "pdf";
   originalText: string;
+  migratedCode?: string;
   gapType: "OUTDATED" | "MISSING" | "VERIFY";
   severity: "HIGH" | "MEDIUM" | "LOW";
   recommendation: string;

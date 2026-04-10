@@ -12,7 +12,7 @@ import { GapReportViewer } from "@/components/GapReportViewer";
 import { Button } from "@/components/ui/button";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldCheck, Clock, CheckCircle2, Swords, MessageCircleWarning } from "lucide-react";
 
 export default function NewAnalysisPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -22,7 +22,7 @@ export default function NewAnalysisPage() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const { extractAndChunk, isProcessing } = usePdfProcessor();
-  const { runAnalysis, retrySummary } = useGapAnalysis();
+  const { runAnalysis, retrySummary, downloadPatchedFile } = useGapAnalysis();
   const { 
     status, progress, gapItems, summary, setAnalysisStatus, resetAnalysis,
     summaryError, isRetryingSummary, summaryRetryCount 
@@ -85,22 +85,15 @@ export default function NewAnalysisPage() {
     }
 
     try {
-      // 3. 브라우저에서 PDF 파싱 + 청킹
-      setAnalysisStatus("parsing");
-      const chunks = await extractAndChunk(file);
+      // 3. 백엔드 통합 분석 실행
+      setAnalysisStatus("analyzing");
+      await runAnalysis({ file, topic, targetAudience });
 
-      if (chunks.length === 0) {
-        toast.error("PDF에서 텍스트를 추출할 수 없습니다.");
-        return;
-      }
-
-      // 4. 마이크로 배치 분석 실행
-      await runAnalysis({ chunks, topic, targetAudience });
-
-      // 5. 최종 리포트 업데이트
+      // 4. 최종 리포트 업데이트
       const currentGapItems = useAnalysisStore.getState().gapItems;
       const score = Math.max(0, 100 - currentGapItems.length * 5);
-      await supabase
+      
+      const { error: updateError } = await supabase
         .from("reports")
         .update({
           status: "completed",
@@ -110,7 +103,9 @@ export default function NewAnalysisPage() {
         })
         .eq("id", report.id);
 
-      // 6. gap_items 저장
+      if (updateError) console.error("Report update error:", updateError);
+
+      // 5. gap_items 저장
       if (currentGapItems.length > 0) {
         await supabase.from("gap_items").insert(
           currentGapItems.map((g) => ({
@@ -122,13 +117,15 @@ export default function NewAnalysisPage() {
             recommendation: g.recommendation,
             web_evidence: g.webEvidence,
             expected_question: g.expectedQuestion ?? null,
+            meta: { cellIndex: g.cellIndex, pageNumber: g.pageNumber, fileType: g.fileType }
           }))
         );
       }
 
       toast.success("분석이 완료되었습니다!");
     } catch (err) {
-      toast.error("분석 중 오류가 발생했습니다.");
+      const errorMessage = err instanceof Error ? err.message : "분석 중 오류가 발생했습니다.";
+      toast.error(errorMessage);
       setAnalysisStatus("error");
       if (report?.id) {
         await supabase
@@ -213,7 +210,91 @@ export default function NewAnalysisPage() {
           onRetrySummary={() => retrySummary({ topic, targetAudience })}
           isRetryingSummary={isRetryingSummary}
           summaryRetryCount={summaryRetryCount}
+          onDownload={file ? () => downloadPatchedFile(file, gapItems) : undefined}
+          fileType={file?.name.toLowerCase().endsWith(".pdf") ? "pdf" : "ipynb"}
         />
+      )}
+
+      {/* 갭 없음 — Defense Simulator Briefing */}
+      {isCompleted && gapItems.length === 0 && (
+        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50 p-6 space-y-5 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center shadow-md">
+              <ShieldCheck className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-widest mb-1">
+                Defense Simulator — All Clear
+              </p>
+              <h2 className="text-lg font-bold text-gray-900 leading-snug">
+                {summary?.oneLiner ?? "교안 방어력 검증 완료. 내용 업데이트 항목 없음."}
+              </h2>
+            </div>
+          </div>
+
+          {summary?.prepTime && (
+            <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium bg-emerald-100 rounded-lg px-3 py-2 w-fit">
+              <Clock className="w-4 h-4" />
+              권장 최종 점검 시간: {summary.prepTime}
+            </div>
+          )}
+
+          {summary?.actionItems && summary.actionItems.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Swords className="w-3.5 h-3.5" />
+                수업 전 마지막 강화 미션
+              </p>
+              <div className="space-y-2">
+                {summary.actionItems.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 bg-white rounded-xl p-3.5 border border-emerald-100 shadow-sm"
+                  >
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center mt-0.5">
+                      {item.priority}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800">{item.action}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">예상 소요: {item.estimatedMin}분</p>
+                    </div>
+                    <CheckCircle2 className="flex-shrink-0 w-4 h-4 text-emerald-400 mt-0.5" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {summary?.defenseDrills && summary.defenseDrills.length > 0 && (
+            <div className="space-y-3 pt-1 border-t border-emerald-100">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                <MessageCircleWarning className="w-3.5 h-3.5" />
+                돌발 질문 디펜스 — 시니어 시험관 시뮬
+              </p>
+              <div className="space-y-3">
+                {summary.defenseDrills.map((drill, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl border border-slate-200 bg-white/90 p-4 space-y-2.5 shadow-sm"
+                  >
+                    <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide">
+                      비유 · 프레이밍
+                    </p>
+                    <p className="text-sm text-slate-700 leading-relaxed">{drill.metaphor}</p>
+                    <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide pt-1">
+                      압박 질문
+                    </p>
+                    <p className="text-sm text-slate-900 font-medium leading-snug">{drill.pressureQuestion}</p>
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide pt-1">
+                      권장 답변 뼈대
+                    </p>
+                    <p className="text-sm text-slate-600 leading-relaxed">{drill.talkTrack}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 완료 버튼 */}
