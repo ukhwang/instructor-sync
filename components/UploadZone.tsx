@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { Upload, FileText, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 interface UploadZoneProps {
@@ -13,17 +14,26 @@ interface UploadZoneProps {
 
 const MAX_SIZE_MB = 10;
 
+/** 서버 요청 전 클라이언트 가드와 동일 문구 */
+export const ALLOWED_MATERIAL_TOAST =
+  "주피터 노트북(.ipynb) 또는 PDF(.pdf) 파일만 업로드 가능합니다";
+
 export function UploadZone({ onFileSelect, selectedFile, onClear, disabled }: UploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const validate = (file: File): boolean => {
-    if (file.type !== "application/pdf") {
-      setError("PDF 파일만 업로드 가능합니다.");
+    const lower = file.name.toLowerCase();
+    const isAccepted = lower.endsWith(".pdf") || lower.endsWith(".ipynb");
+    if (!isAccepted) {
+      setError(ALLOWED_MATERIAL_TOAST);
+      toast.error(ALLOWED_MATERIAL_TOAST);
       return false;
     }
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      setError(`파일 크기는 ${MAX_SIZE_MB}MB 이하여야 합니다.`);
+      const msg = `파일 크기는 ${MAX_SIZE_MB}MB 이하여야 합니다.`;
+      setError(msg);
+      toast.error(msg);
       return false;
     }
     setError(null);
@@ -85,13 +95,13 @@ export function UploadZone({ onFileSelect, selectedFile, onClear, disabled }: Up
       >
         <input
           type="file"
-          accept=".pdf"
+          accept=".ipynb,application/pdf"
           className="hidden"
           onChange={handleChange}
           disabled={disabled}
         />
         <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
-        <p className="font-medium">PDF를 드래그하거나 클릭하여 업로드</p>
+        <p className="font-medium">교안 파일(.pdf, .ipynb)을 드래그하거나 클릭하여 업로드</p>
         <p className="text-sm text-muted-foreground mt-1">최대 {MAX_SIZE_MB}MB</p>
       </label>
       {error && <p className="text-sm text-red-500">{error}</p>}

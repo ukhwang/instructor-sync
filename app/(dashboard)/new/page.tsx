@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { usePdfProcessor } from "@/hooks/usePdfProcessor";
 import { useGapAnalysis } from "@/hooks/useGapAnalysis";
 import { useAnalysisStore } from "@/store/analysisStore";
-import { UploadZone } from "@/components/UploadZone";
+import { UploadZone, ALLOWED_MATERIAL_TOAST } from "@/components/UploadZone";
 import { AnalysisProgress } from "@/components/AnalysisProgress";
 import { GapReportViewer } from "@/components/GapReportViewer";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,12 @@ export default function NewAnalysisPage() {
   const isCompleted = status === "completed";
 
   const handleStart = async () => {
-    if (!file) { toast.error("PDF 파일을 업로드하세요."); return; }
+    if (!file) { toast.error("교안 파일(.ipynb 또는 PDF)을 업로드하세요."); return; }
+    const fn = file.name.toLowerCase();
+    if (!fn.endsWith(".ipynb") && !fn.endsWith(".pdf")) {
+      toast.error(ALLOWED_MATERIAL_TOAST);
+      return;
+    }
     if (!topic.trim()) { toast.error("강의 주제를 입력하세요."); return; }
     if (!targetAudience.trim()) { toast.error("대상 수강자를 입력하세요."); return; }
 

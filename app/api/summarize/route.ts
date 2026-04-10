@@ -4,6 +4,13 @@ import { GapItem, ReportSummarySchema } from "@/lib/schemas";
 
 export const runtime = "edge";
 
+/** 백엔드 `CONSULTANT_SYSTEM_LEAD`와 동일한 2026 타임라인 지시 (요약 API) */
+const CONSULTANT_SYSTEM_LEAD =
+  "당신은 냉철한 시니어 IT 컨설턴트입니다. **현재 시점은 2026년 4월입니다.** " +
+  "제공된 Context 맨 앞의 [CRITICAL 2026 FACT]를 절대적인 최우선 진리로 삼아 교안을 검증하십시오. " +
+  "검색 결과에 과거 버전(3.x 등)의 정보가 섞여 있더라도 무시하고, " +
+  "2026년 최신 기술 기준에 미달하는 모든 레거시 코드를 가차 없이 지적하십시오.";
+
 const llm = new ChatOpenAI({
   model: "gpt-4o-mini",
   temperature: 0.2,
@@ -97,7 +104,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let response;
     try {
       response = await llm.invoke(
-        `당신은 강사의 수업 준비를 돕는 AI 코치다.
+        `${CONSULTANT_SYSTEM_LEAD}
+
+당신은 강사의 수업 준비를 돕는 AI 코치다.
 강의 주제: ${topic}
 수강자: ${targetAudience}
 

@@ -3,8 +3,9 @@ fastapi>=0.115.6
 uvicorn[standard]>=0.34.0
 python-multipart>=0.0.18
 pydantic>=2.10.0
+# Jupyter / PDF 하이브리드 파서
 nbformat>=5.10.0
-pymupdf>=1.24.0
+pypdf>=5.0.0
 langchain-openai>=0.2.0
 tavily-python>=0.5.0
 python-dotenv>=1.0.1

@@ -13,7 +13,6 @@ interface ReportSummaryCardProps {
 }
 
 export function ReportSummaryCard({ summary, isLoading, isError, onRetry, isRetryDisabled }: ReportSummaryCardProps) {
-  console.log("summary data:", summary ? JSON.stringify(summary) : isError ? "error" : "loading");
 
   if (isError) {
     return (
@@ -64,19 +63,35 @@ export function ReportSummaryCard({ summary, isLoading, isError, onRetry, isRetr
       <div id="ai-summary-debug" className="hidden">{JSON.stringify(summary)}</div>
       
       {/* AI 한줄 요약 */}
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg bg-blue-600 shrink-0">
-          <AlertCircle className="w-5 h-5 text-white" />
+      {summary?.oneLiner ? (
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-blue-600 shrink-0">
+            <AlertCircle className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+              AI 코치 요약
+            </p>
+            <p className="text-sm leading-relaxed font-medium text-slate-800">
+              {summary.oneLiner}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
-            AI 코치 요약
-          </p>
-          <p className="text-sm leading-relaxed font-medium text-slate-800">
-            {summary?.oneLiner}
-          </p>
+      ) : (
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-green-500 shrink-0">
+            <CheckCircle className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-1">
+              AI 코치 요약 (변경 사항 없음)
+            </p>
+            <p className="text-sm leading-relaxed font-medium text-slate-800">
+              현재 교안은 최신 트렌드를 완벽하게 반영하고 있습니다. 내용 검증에 소모될 시간을 아껴, 수강생의 몰입을 이끌어낼 '전달 방식'과 '심화 질문 대비'에 집중하시기 바랍니다.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 예상 준비시간 */}
       <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-blue-200 w-fit">
@@ -85,7 +100,7 @@ export function ReportSummaryCard({ summary, isLoading, isError, onRetry, isRetr
           예상 준비 시간:
         </span>
         <span className="text-sm font-bold text-blue-600">
-          {summary?.prepTime}
+          {summary?.prepTime || "0분 (추가 검증 없음)"}
         </span>
       </div>
 

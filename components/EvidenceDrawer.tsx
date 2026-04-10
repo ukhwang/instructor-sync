@@ -9,6 +9,7 @@ import {
 import { GapItem } from "@/lib/schemas";
 import { GapBadge } from "./GapBadge";
 import { ExternalLink } from "lucide-react";
+import { KnowledgeGapReport } from "./KnowledgeGapReport";
 
 interface EvidenceDrawerProps {
   gap: GapItem | null;
@@ -45,6 +46,31 @@ export function EvidenceDrawer({ gap, open, onClose }: EvidenceDrawerProps) {
             </p>
             <p className="text-sm leading-relaxed">{gap.recommendation}</p>
           </div>
+
+          {/* 코드 마이그레이션 제안 */}
+          {gap.migratedCode && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                코드 마이그레이션 제안
+              </p>
+              <KnowledgeGapReport 
+                original={gap.originalText} 
+                migrated={gap.migratedCode} 
+              />
+            </div>
+          )}
+
+          {/* 수강생 예상 질문 (USP) */}
+          {gap.expectedQuestion && (
+            <div className="rounded-xl border-2 border-orange-100 bg-orange-50 p-4">
+              <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <span>⚠️</span> 브레이커용 돌발 질문 (예상)
+              </p>
+              <p className="text-sm font-semibold text-slate-800 leading-relaxed italic">
+                "{gap.expectedQuestion}"
+              </p>
+            </div>
+          )}
 
           {/* 웹 근거 */}
           {gap.webEvidence.length > 0 && (

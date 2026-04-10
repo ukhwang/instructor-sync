@@ -2,10 +2,10 @@ import os
 import io
 import json
 import time
-import traceback
+import re
 import logging
 import nbformat
-import fitz  # PyMuPDF
+from pypdf import PdfReader
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -84,43 +84,80 @@ class AnalyzeResponse(BaseModel):
     gaps: List[GapItem]
     hasGaps: bool
 
-# --- Helpers ---
+# --- Helpers: 포맷별 파싱 → 동일 청크 스키마로 통일 ---
 
-def extract_text_from_pdf(content: bytes) -> List[dict]:
-    """PDF에서 페이지별로 텍스트 추출 (최대 5페이지 제한)"""
-    doc = fitz.open(stream=content, filetype="pdf")
-    pages = []
-    
-    # 분석 대상 키워드 (소문자로 비교)
-    target_keywords = ["claude", "chatgpt", "midjourney", "api", "openai", "langchain", "llama", "diffusion"]
-    
-    for i, page in enumerate(doc):
-        if len(pages) >= 5: # 하드리미트 추가
-            break
-            
-        text = page.get_text()
-        has_keyword = any(kw in text.lower() for kw in target_keywords)
-        
-        if has_keyword:
-            pages.append({
-                "page_num": i + 1,
-                "content": text
-            })
-    
-    return pages
+MAX_CHUNKS_PER_ANALYZE = 5
+
+# --- 2026 데모 타임라인 가드 (Tavily 과거 검색 결과와의 충돌 완화) ---
+
+_FACT_CLAUDE = (
+    "[CRITICAL 2026 FACT]: 현재 Anthropic의 최신 플래그십 모델은 'Claude 4.6 Opus'임. "
+    "(기존 3.x 시리즈는 완전 레거시). 4.6 버전은 Agentic 자동 디버깅 및 IDE 네이티브 통합이 표준임.\n\n"
+)
+_FACT_NEXT_REACT = (
+    "[CRITICAL 2026 FACT]: 현재 Next.js의 표준 버전은 16.2이며, React 19 네이티브 컴파일러가 기본 적용됨. "
+    "App Router의 초기 캐싱 이슈는 완전히 해결되었음.\n\n"
+)
+_FACT_PYTHON = (
+    "[CRITICAL 2026 FACT]: Python 3.14가 엔터프라이즈 표준임. "
+    "GIL(Global Interpreter Lock)이 완전히 해제된 Free-threaded 빌드가 기본으로 사용됨.\n\n"
+)
+
+CONSULTANT_SYSTEM_LEAD = (
+    "당신은 냉철한 시니어 IT 컨설턴트입니다. **현재 시점은 2026년 4월입니다.** "
+    "제공된 Context 맨 앞의 [CRITICAL 2026 FACT]를 절대적인 최우선 진리로 삼아 교안을 검증하십시오. "
+    "검색 결과에 과거 버전(3.x 등)의 정보가 섞여 있더라도 무시하고, "
+    "2026년 최신 기술 기준에 미달하는 모든 레거시 코드를 가차 없이 지적하십시오."
+)
+
+
+def inject_2026_context(chunk_text: str, web_context: str) -> str:
+    """
+    교안 청크 키워드에 맞춰 [CRITICAL 2026 FACT]를 웹 컨텍스트 문자열 맨 앞에 prepend.
+    Tavily 본문 앞에 삽입되어 LLM user 메시지의 [최신 웹 정보] 섹션 최상단에 위치함.
+    """
+    hay = chunk_text.lower()
+    blocks: List[str] = []
+    if re.search(r"\bclaude\b", hay) or "클로드" in chunk_text:
+        blocks.append(_FACT_CLAUDE)
+    if re.search(r"next\.js|nextjs|\breact\b", hay, re.IGNORECASE):
+        blocks.append(_FACT_NEXT_REACT)
+    if re.search(r"\bpython\b", hay) or "파이썬" in chunk_text:
+        blocks.append(_FACT_PYTHON)
+    if not blocks:
+        return web_context
+    return "".join(blocks) + web_context
+
 
 def extract_code_from_ipynb(content: bytes) -> List[dict]:
-    """Jupyter Notebook에서 코드 셀 추출"""
+    """Jupyter Notebook에서 코드 셀만 추출 (노트북 셀 인덱스 보존)."""
     nb = nbformat.reads(content.decode("utf-8"), as_version=4)
-    code_cells = []
-    
+    code_cells: List[dict] = []
     for i, cell in enumerate(nb.cells):
         if cell.cell_type == "code":
-            code_cells.append({
-                "cell_index": i,
-                "content": cell.source
-            })
+            code_cells.append({"cell_index": i, "content": cell.source})
     return code_cells
+
+
+def extract_full_text_from_pdf(content: bytes) -> List[dict]:
+    """
+    pypdf + BytesIO로 디스크 없이 PDF 전 페이지 텍스트를 추출해 하나의 문자열로 합칩니다.
+    이후 파이프라인은 ipynb와 동일하게 chunk 리스트(단일 항목)로 처리합니다.
+    """
+    reader = PdfReader(io.BytesIO(content))
+    parts: List[str] = []
+    for page in reader.pages:
+        raw = page.extract_text()
+        if raw and raw.strip():
+            parts.append(raw.strip())
+    merged = "\n\n".join(parts).strip()
+    if not merged:
+        return []
+    # 컨테이너/토큰 상한 (과대 문서 방지)
+    max_chars = 120_000
+    if len(merged) > max_chars:
+        merged = merged[:max_chars]
+    return [{"content": merged, "page_num": 1}]
 
 def _parse_llm_gap_json(raw: str) -> List[dict]:
     """LLM 응답에서 JSON 배열만 안전하게 추출 (마크다운/노이즈 허용)."""
@@ -161,8 +198,12 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
             logging.exception("Tavily 검색 실패 — 웹 컨텍스트 없이 진행합니다.")
             search_result = {"results": []}
 
+    web_context = inject_2026_context(content, web_context)
+
     # 2. LLM 분석
-    system_prompt = f"""당신은 IT 강사의 교안을 분석하여 최신 트렌드와 어긋나는 '지식 갭'을 찾아내는 전문가입니다.
+    system_prompt = f"""{CONSULTANT_SYSTEM_LEAD}
+
+당신은 IT 강사의 교안을 분석하여 최신 트렌드와 어긋나는 '지식 갭'을 찾아내는 전문가입니다.
 대상 강의 주제: {topic}
 수강자 수준: {target}
 
@@ -249,22 +290,22 @@ async def analyze_file(
     """파일 타입에 따라 파싱 후 지식 갭 분석 실행 (내부 에러 로깅)"""
     try:
         content = await file.read()
-        filename = file.filename.lower()
-        
-        chunks = []
-        source_type = ""
-        
+        filename = (file.filename or "").lower()
+
         if filename.endswith(".ipynb"):
             chunks = extract_code_from_ipynb(content)
             source_type = "ipynb"
         elif filename.endswith(".pdf"):
-            chunks = extract_text_from_pdf(content)
+            chunks = extract_full_text_from_pdf(content)
             source_type = "pdf"
         else:
-            raise HTTPException(status_code=400, detail="Only .ipynb or .pdf files are supported")
-        
+            raise HTTPException(
+                status_code=400,
+                detail="Only .ipynb or .pdf files are supported",
+            )
+
         all_gaps = []
-        for chunk in chunks[:5]:
+        for chunk in chunks[:MAX_CHUNKS_PER_ANALYZE]:
             gaps = await analyze_gap(
                 chunk["content"], 
                 topic, 
