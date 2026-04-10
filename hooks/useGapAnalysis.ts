@@ -2,13 +2,18 @@
 
 import { useCallback } from "react";
 import { useAnalysisStore } from "@/store/analysisStore";
-import { AnalyzeChunkInput, AnalyzeChunkOutput, ReportSummarySchema } from "@/lib/schemas";
-
-const CONCURRENT_BATCH_SIZE = 2; // 동시에 처리할 청크 수 (타임아웃 안전 마진)
+import { ReportSummarySchema, GapItem } from "@/lib/schemas";
+import {
+  ANALYZE_FETCH_TIMEOUT_MS,
+  mapAnalyzeHttpStatus,
+  mapAnalyzeNetworkError,
+  parseFastAPIErrorDetail,
+  parseFastAPIErrorDetailFromText,
+} from "@/lib/analysisErrors";
 
 interface UseGapAnalysisReturn {
   runAnalysis: (params: {
-    chunks: string[];
+    file: File;
     topic: string;
     targetAudience: string;
   }) => Promise<void>;
@@ -16,6 +21,7 @@ interface UseGapAnalysisReturn {
     topic: string;
     targetAudience: string;
   }) => Promise<void>;
+  downloadPatchedFile: (originalFile: File, gaps: GapItem[]) => Promise<void>;
 }
 
 export function useGapAnalysis(): UseGapAnalysisReturn {
@@ -24,97 +30,106 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
     summaryRetryCount, incrementSummaryRetryCount, setIsRetryingSummary
   } = useAnalysisStore();
 
-  const analyzeChunk = async (
-    payload: AnalyzeChunkInput
-  ): Promise<AnalyzeChunkOutput> => {
-    const res = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      // 개별 청크 실패는 전체를 중단하지 않음 — allSettled 전략
-      throw new Error(`청크 ${payload.chunkIndex} 분석 실패: ${res.status}`);
-    }
-
-    return res.json() as Promise<AnalyzeChunkOutput>;
-  };
-
   const runAnalysis = useCallback(
     async ({
-      chunks,
+      file,
       topic,
       targetAudience,
     }: {
-      chunks: string[];
+      file: File;
       topic: string;
       targetAudience: string;
     }) => {
       setAnalysisStatus("analyzing");
-      const total = chunks.length;
+      setAnalysisProgress(10); // 시작점
 
-      // CONCURRENT_BATCH_SIZE 단위로 슬라이싱하여 병렬 처리
-      for (let i = 0; i < total; i += CONCURRENT_BATCH_SIZE) {
-        const batch = chunks.slice(i, i + CONCURRENT_BATCH_SIZE);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("topic", topic);
+      formData.append("targetAudience", targetAudience);
 
-        const results = await Promise.allSettled(
-          batch.map((chunkText, batchIdx) =>
-            analyzeChunk({
-              chunkText,
-              chunkIndex: i + batchIdx,
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), ANALYZE_FETCH_TIMEOUT_MS);
+
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+        let res: Response;
+        try {
+          res = await fetch(`${baseUrl}/api/analyze`, {
+            method: "POST",
+            body: formData,
+            signal: controller.signal,
+          });
+        } catch (e) {
+          throw new Error(mapAnalyzeNetworkError(e));
+        } finally {
+          window.clearTimeout(timeoutId);
+        }
+
+        const rawText = await res.text();
+        let data: Record<string, unknown>;
+        try {
+          data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {};
+        } catch {
+          throw new Error(
+            "분석 응답을 해석할 수 없습니다. 서버가 일시적으로 불안정할 수 있으니 잠시 후 다시 시도해 주세요."
+          );
+        }
+
+        if (!res.ok) {
+          const detail = parseFastAPIErrorDetailFromText(rawText);
+          throw new Error(detail || mapAnalyzeHttpStatus(res.status));
+        }
+
+        if (!Array.isArray(data.gaps)) {
+          throw new Error(
+            "분석 결과 형식이 올바르지 않습니다. 잠시 후 다시 시도해 주세요."
+          );
+        }
+
+        setAnalysisProgress(80);
+
+        if (data.gaps.length > 0) {
+          const st = data.sourceType === "pdf" || data.sourceType === "ipynb" ? data.sourceType : undefined;
+          const gapsWithContext = (data.gaps as GapItem[]).map((g) => ({
+            ...g,
+            fileType: st ?? g.fileType,
+          }));
+          addGapItems(gapsWithContext);
+        }
+
+        // 분석 완료 후 요약 호출
+        try {
+          setSummaryError(false);
+          const summaryRes = await fetch("/api/summarize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
               topic,
               targetAudience,
-            })
-          )
-        );
+              gaps: data.gaps as GapItem[],
+            }),
+          });
 
-        results.forEach((result) => {
-          if (result.status === "fulfilled" && result.value.hasGaps) {
-            // 성공한 청크 결과만 즉시 Zustand에 병합 → UI 실시간 업데이트
-            addGapItems(result.value.gaps);
+          if (summaryRes.ok) {
+            const rawData = await summaryRes.json();
+            const parsed = ReportSummarySchema.safeParse(rawData);
+            if (parsed.success) setSummary(parsed.data);
           }
-          // 실패한 청크는 조용히 스킵 (UX 방해 없음)
-        });
-
-        // 진행률 업데이트
-        const processed = Math.min(i + CONCURRENT_BATCH_SIZE, total);
-        setAnalysisProgress(Math.round((processed / total) * 100));
-      }
-
-      // 분석 완료 후 요약 호출 (단일 진실 공급원 - API 사용)
-      try {
-        setSummaryError(false);
-        const currentGaps = useAnalysisStore.getState().gapItems;
-        const summaryRes = await fetch("/api/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            topic,
-            targetAudience,
-            gaps: currentGaps,
-          }),
-        });
-
-        if (!summaryRes.ok) {
-          throw new Error(`Summary API failed with status ${summaryRes.status}`);
-        }
-
-        const rawData = await summaryRes.json();
-        const parsed = ReportSummarySchema.safeParse(rawData); // 런타임 방어선
-
-        if (!parsed.success) {
-          console.error("[Sentry 추적용 로그] 요약 파싱 검증 실패:", parsed.error, "응답 데이터:", rawData);
+        } catch (err) {
+          console.error("요약 생성 실패:", err);
           setSummaryError(true);
-        } else {
-          setSummary(parsed.data);
         }
-      } catch (err) {
-        console.error("[Sentry 추적용 로그] 요약 생성 실패 (네트워크 또는 서버):", err);
-        setSummaryError(true);
-      }
 
-      setAnalysisStatus("completed");
+        setAnalysisProgress(100);
+        setAnalysisStatus("completed");
+      } catch (err) {
+        console.error("분석 중 오류:", err);
+        setAnalysisStatus("error");
+        const message =
+          err instanceof Error ? err.message : "분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+        throw new Error(message);
+      }
     },
     [addGapItems, setAnalysisProgress, setAnalysisStatus, setSummary, setSummaryError]
   );
@@ -122,9 +137,7 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
   const retrySummary = useCallback(
     async ({ topic, targetAudience }: { topic: string; targetAudience: string }) => {
       if (summaryRetryCount >= 3) return;
-
       try {
-        // 낙관적 UI(Optimistic UI) 업데이트: 에러 메시지를 지우고 스켈레톤 로더로 원복
         setSummaryError(false);
         setIsRetryingSummary(true);
         incrementSummaryRetryCount();
@@ -133,28 +146,16 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
         const summaryRes = await fetch("/api/summarize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            topic,
-            targetAudience,
-            gaps: currentGaps,
-          }),
+          body: JSON.stringify({ topic, targetAudience, gaps: currentGaps }),
         });
 
-        if (!summaryRes.ok) {
-          throw new Error(`Summary API failed with status ${summaryRes.status}`);
-        }
-
-        const rawData = await summaryRes.json();
-        const parsed = ReportSummarySchema.safeParse(rawData);
-
-        if (!parsed.success) {
-          console.error("[Sentry 추적용 로그] 요약 재시도 파싱 실패:", parsed.error, rawData);
-          setSummaryError(true);
-        } else {
-          setSummary(parsed.data);
+        if (summaryRes.ok) {
+          const rawData = await summaryRes.json();
+          const parsed = ReportSummarySchema.safeParse(rawData);
+          if (parsed.success) setSummary(parsed.data);
+          else setSummaryError(true);
         }
       } catch (err) {
-        console.error("[Sentry 추적용 로그] 요약 재시도 실패:", err);
         setSummaryError(true);
       } finally {
         setIsRetryingSummary(false);
@@ -163,5 +164,49 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
     [setSummary, setSummaryError, summaryRetryCount, incrementSummaryRetryCount, setIsRetryingSummary]
   );
 
-  return { runAnalysis, retrySummary };
+  const downloadPatchedFile = useCallback(
+    async (originalFile: File, gaps: GapItem[]) => {
+      if (originalFile.name.toLowerCase().endsWith(".pdf")) {
+        alert("PDF 파일은 수정본 다운로드를 지원하지 않습니다.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", originalFile);
+      
+      const patchData = gaps
+        .filter(g => g.migratedCode && g.cellIndex !== undefined)
+        .map(g => ({ cell_index: g.cellIndex, migrated_code: g.migratedCode }));
+        
+      formData.append("gap_items_json", JSON.stringify(patchData));
+
+      let res: Response;
+      try {
+        res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"}/api/export`, {
+          method: "POST",
+          body: formData,
+        });
+      } catch (e) {
+        throw new Error(mapAnalyzeNetworkError(e));
+      }
+
+      if (!res.ok) {
+        const detail = await parseFastAPIErrorDetail(res);
+        throw new Error(detail || mapAnalyzeHttpStatus(res.status));
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `patched_${originalFile.name}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    },
+    []
+  );
+
+  return { runAnalysis, retrySummary, downloadPatchedFile };
 }
