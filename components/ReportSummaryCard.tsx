@@ -41,7 +41,7 @@ export function ReportSummaryCard({ summary, isLoading, isError, onRetry, isRetr
 
   if (isLoading) {
     return (
-      <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-6 space-y-4">
+      <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-6 space-y-4 animate-pulse">
         <div className="flex items-start gap-3">
           <Skeleton className="w-9 h-9 rounded-lg shrink-0" />
           <div className="space-y-2 flex-1">
@@ -60,8 +60,6 @@ export function ReportSummaryCard({ summary, isLoading, isError, onRetry, isRetr
 
   return (
     <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-6 space-y-4">
-      <div id="ai-summary-debug" className="hidden">{JSON.stringify(summary)}</div>
-      
       {/* AI 한줄 요약 */}
       {summary?.oneLiner ? (
         <div className="flex items-start gap-3">

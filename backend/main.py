@@ -87,6 +87,9 @@ class AnalyzeResponse(BaseModel):
 # --- Helpers: 포맷별 파싱 → 동일 청크 스키마로 통일 ---
 
 MAX_CHUNKS_PER_ANALYZE = 5
+MAX_CONTENT_CHARS_PER_CHUNK = 20_000
+MAX_PDF_TOTAL_CHARS = 120_000
+PDF_HEAD_TAIL_WINDOW = 6_000
 
 # --- 2026 데모 타임라인 가드 (Tavily 과거 검색 결과와의 충돌 완화) ---
 
@@ -147,17 +150,43 @@ def extract_full_text_from_pdf(content: bytes) -> List[dict]:
     reader = PdfReader(io.BytesIO(content))
     parts: List[str] = []
     for page in reader.pages:
-        raw = page.extract_text()
+        try:
+            raw = page.extract_text()
+        except Exception:
+            logging.warning("PDF 페이지 텍스트 추출 실패 — 해당 페이지 스킵")
+            continue
         if raw and raw.strip():
-            parts.append(raw.strip())
+            parts.append(_normalize_text_for_llm(raw.strip()))
     merged = "\n\n".join(parts).strip()
     if not merged:
         return []
-    # 컨테이너/토큰 상한 (과대 문서 방지)
-    max_chars = 120_000
-    if len(merged) > max_chars:
-        merged = merged[:max_chars]
+    merged = _truncate_for_llm(merged, MAX_PDF_TOTAL_CHARS, PDF_HEAD_TAIL_WINDOW)
     return [{"content": merged, "page_num": 1}]
+
+
+def _normalize_text_for_llm(text: str) -> str:
+    """
+    PDF 추출 노이즈(깨진 제어문자/과도한 공백)를 정리해 토큰 낭비와 파싱 실패를 줄입니다.
+    """
+    cleaned = text.replace("\x00", " ")
+    cleaned = re.sub(r"[\uFFFD]", "", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _truncate_for_llm(text: str, max_chars: int, head_tail_window: int) -> str:
+    """
+    너무 긴 텍스트는 앞/뒤 핵심 구간을 남기고 절삭합니다.
+    """
+    if len(text) <= max_chars:
+        return text
+    head = text[:head_tail_window]
+    tail = text[-head_tail_window:]
+    omitted = len(text) - (len(head) + len(tail))
+    marker = f"\n\n[TRUNCATED_FOR_TOKEN_LIMIT: omitted {omitted} chars]\n\n"
+    combined = f"{head}{marker}{tail}"
+    return combined[:max_chars]
 
 def _parse_llm_gap_json(raw: str) -> List[dict]:
     """LLM 응답에서 JSON 배열만 안전하게 추출 (마크다운/노이즈 허용)."""
@@ -183,6 +212,10 @@ def _parse_llm_gap_json(raw: str) -> List[dict]:
     return []
 
 async def analyze_gap(content: str, topic: str, target: str, index: int, source_type: str) -> List[GapItem]:
+    content = _truncate_for_llm(_normalize_text_for_llm(content), MAX_CONTENT_CHARS_PER_CHUNK, 8_000)
+    if not content:
+        return []
+
     """RAG 파이프라인으로 지식 갭 분석"""
     # 1. Tavily 검색 리서치
     search_query = f"Latest updates and common pitfalls for {topic} in context of: {content[:200]}"
@@ -327,14 +360,20 @@ async def analyze_file(
         logging.exception("analyze_file 실패")
         err = str(e).lower()
         if "timeout" in err or "timed out" in err or "read timed out" in err:
-            raise HTTPException(
-                status_code=503,
-                detail="현재 분석 서버 부하로 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.",
-            ) from e
-        raise HTTPException(
-            status_code=500,
-            detail="분석 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
-        ) from e
+            return {
+                "chunks": [],
+                "gaps": [],
+                "hasGaps": False,
+                "sourceType": "unknown",
+                "errorMessage": "현재 분석 서버 부하로 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.",
+            }
+        return {
+            "chunks": [],
+            "gaps": [],
+            "hasGaps": False,
+            "sourceType": "unknown",
+            "errorMessage": "분석 처리 중 오류가 발생했지만 서버는 안전하게 복구되었습니다. 잠시 후 다시 시도해 주세요.",
+        }
 
 @app.post("/api/export")
 async def export_patched_notebook(
@@ -366,8 +405,9 @@ async def export_patched_notebook(
             media_type="application/x-ipynb+json",
             headers={"Content-Disposition": f"attachment; filename=patched_{file.filename}"}
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logging.exception("export_patched_notebook 실패")
+        raise HTTPException(status_code=500, detail="노트북 수정본 생성 중 오류가 발생했습니다.")
 
 if __name__ == "__main__":
     import uvicorn

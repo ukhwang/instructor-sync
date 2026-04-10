@@ -86,6 +86,9 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
             "분석 결과 형식이 올바르지 않습니다. 잠시 후 다시 시도해 주세요."
           );
         }
+        if (typeof data.errorMessage === "string" && data.errorMessage.trim()) {
+          throw new Error(data.errorMessage);
+        }
 
         setAnalysisProgress(80);
 
@@ -117,14 +120,12 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
             if (parsed.success) setSummary(parsed.data);
           }
         } catch (err) {
-          console.error("요약 생성 실패:", err);
           setSummaryError(true);
         }
 
         setAnalysisProgress(100);
         setAnalysisStatus("completed");
       } catch (err) {
-        console.error("분석 중 오류:", err);
         setAnalysisStatus("error");
         const message =
           err instanceof Error ? err.message : "분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
@@ -155,7 +156,7 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
           if (parsed.success) setSummary(parsed.data);
           else setSummaryError(true);
         }
-      } catch (err) {
+      } catch {
         setSummaryError(true);
       } finally {
         setIsRetryingSummary(false);

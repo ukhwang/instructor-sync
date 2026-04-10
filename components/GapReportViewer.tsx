@@ -82,7 +82,8 @@ export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryEr
             size="sm" 
             onClick={onDownload}
             disabled={fileType === "pdf"}
-            className="rounded-xl border-blue-200 bg-blue-50/50 hover:bg-blue-100 text-blue-700 font-bold gap-2 disabled:opacity-30"
+            className="rounded-xl border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-bold gap-2 transition-all duration-300 disabled:opacity-100 disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
+            title={fileType === "pdf" ? "PDF는 원문 구조 특성상 패치 파일 내보내기를 지원하지 않습니다." : undefined}
           >
             <Download className="w-4 h-4" />
             {fileType === "pdf" ? "수정본 다운로드 불가 (PDF)" : "패치된 파일 다운로드 (.ipynb)"}
@@ -111,11 +112,11 @@ export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryEr
       {/* 갭 리스트 */}
       <div className="space-y-3">
         {isAnalyzing && gaps.length === 0 && (
-          <>
+          <div className="space-y-3 animate-pulse">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-xl" />
+              <Skeleton key={i} className="h-24 w-full rounded-xl motion-safe:transition-opacity motion-safe:duration-500" />
             ))}
-          </>
+          </div>
         )}
 
         {filtered.map((gap) => (
@@ -186,7 +187,7 @@ export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryEr
 
             {/* 로딩 상태 표시 */}
             {isMockLoading && (
-              <div className="flex flex-col items-center justify-center p-12 space-y-4 bg-slate-50/30 rounded-xl border border-dashed border-slate-200 animate-in fade-in duration-500">
+              <div className="flex flex-col items-center justify-center p-12 space-y-4 bg-slate-50/30 rounded-xl border border-dashed border-slate-200 animate-in fade-in duration-500 motion-safe:transition-all motion-safe:duration-500">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 <p className="text-sm font-medium text-slate-600">AI 코치가 교안의 논리적 맹점을 파악 중입니다...</p>
               </div>
@@ -194,7 +195,7 @@ export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryEr
 
             {/* 결과 카드 */}
             {!isMockLoading && activeBonus && (
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all border-l-4 border-l-blue-500 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition-all duration-300 border-l-4 border-l-blue-500 animate-in slide-in-from-bottom-4 fade-in duration-500">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-sm font-bold text-slate-800">{COACH_MOCK_DATA[activeBonus].title}</h4>
                   <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-100">AI COMPLEMENT</Badge>

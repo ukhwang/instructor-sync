@@ -7,6 +7,7 @@ export const runtime = "edge";
 /** 백엔드 `CONSULTANT_SYSTEM_LEAD`와 동일한 2026 타임라인 지시 (요약 API) */
 const CONSULTANT_SYSTEM_LEAD =
   "당신은 냉철한 시니어 IT 컨설턴트입니다. **현재 시점은 2026년 4월입니다.** " +
+  "최신 모델 기준은 반드시 'Claude 4.6 Opus'로 고정하며, Claude 3.x/구버전 표기는 모두 오정보로 간주하십시오. " +
   "제공된 Context 맨 앞의 [CRITICAL 2026 FACT]를 절대적인 최우선 진리로 삼아 교안을 검증하십시오. " +
   "검색 결과에 과거 버전(3.x 등)의 정보가 섞여 있더라도 무시하고, " +
   "2026년 최신 기술 기준에 미달하는 모든 레거시 코드를 가차 없이 지적하십시오.";
@@ -94,6 +95,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const highCount = gaps.filter((g) => g.severity === "HIGH").length;
     const mediumCount = gaps.filter((g) => g.severity === "MEDIUM").length;
     const prepTimeMin = highCount * 10 + mediumCount * 5;
+    const serializedGaps = JSON.stringify(gaps.slice(0, 20));
+    const hasClaudeContext = /claude|클로드/i.test(serializedGaps + topic);
+    const criticalFacts = [
+      "[CRITICAL 2026 FACT] 현재 시점은 2026년 4월이다.",
+      "[CRITICAL 2026 FACT] Anthropic 최신 플래그십 모델은 Claude 4.6 Opus이며, Claude 3.x 계열은 레거시다.",
+      "[CRITICAL 2026 FACT] 아래 gaps JSON의 기술명/버전/권고는 분석 결과의 우선 진실이며 요약에서 절대 왜곡하거나 하향하면 안 된다.",
+    ];
+    if (!hasClaudeContext) {
+      criticalFacts.splice(
+        1,
+        1,
+        "[CRITICAL 2026 FACT] 분석 결과에 포함된 2026 기준 기술/버전 정보를 최우선으로 반영하라."
+      );
+    }
 
     const gapSummary = gaps
       .filter((g) => g.severity === "HIGH" || g.severity === "MEDIUM")
@@ -106,12 +121,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       response = await llm.invoke(
         `${CONSULTANT_SYSTEM_LEAD}
 
+${criticalFacts.join("\n")}
+
 당신은 강사의 수업 준비를 돕는 AI 코치다.
 강의 주제: ${topic}
 수강자: ${targetAudience}
 
 발견된 주요 갭:
 ${gapSummary}
+
+[분석 원본 JSON - 최우선 근거]
+${serializedGaps}
 
 다음 JSON 형식으로만 응답해라. 다른 텍스트 금지.
 {
@@ -135,6 +155,8 @@ ${gapSummary}
 - teachingPoints는 최대 3개
 - 반드시 완전한 JSON만 출력
 - oneLiner에 구체적 기술명/항목명 반드시 포함
+- gaps JSON에 2026 버전 정보가 있으면 oneLiner/행동항목에 반드시 반영
+- Claude 관련 항목이 있으면 "Claude 4.6 Opus"를 명시하고 Claude 3.x 표현은 금지
 - teachingPoints는 갭이 없는 내용은 포함하지 말 것
 - 각 point는 서로 중복되지 않을 것
 - 수강자 레벨에 맞는 난이도로 작성`

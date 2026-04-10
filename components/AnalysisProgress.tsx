@@ -1,7 +1,7 @@
 "use client";
 
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Search, Brain, CheckCircle } from "lucide-react";
+import { Loader2, Search, CheckCircle } from "lucide-react";
 import { useAnalysisStore } from "@/store/analysisStore";
 
 const STEPS = [
@@ -18,9 +18,9 @@ export function AnalysisProgress() {
   const isCompleted = status === "completed";
 
   return (
-    <div className="rounded-xl border bg-card p-8 space-y-5 text-center">
+    <div className="rounded-xl border bg-card p-8 space-y-5 text-center motion-safe:transition-all motion-safe:duration-500">
       <div className="flex justify-center">
-        <div className={`p-4 rounded-full ${isCompleted ? "bg-green-100" : "bg-blue-50"}`}>
+        <div className={`p-4 rounded-full motion-safe:transition-colors motion-safe:duration-500 ${isCompleted ? "bg-green-100" : "bg-blue-50"}`}>
           <Icon
             className={`w-8 h-8 ${
               isCompleted
@@ -38,7 +38,7 @@ export function AnalysisProgress() {
         </p>
       </div>
 
-      <Progress value={progress} className="h-2" />
+      <Progress value={progress} className="h-2 motion-safe:transition-all motion-safe:duration-500" />
 
       {/* 단계 인디케이터 */}
       <div className="flex justify-center gap-6 pt-2">
