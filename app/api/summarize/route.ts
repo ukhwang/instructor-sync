@@ -4,17 +4,18 @@ import { GapItem, ReportSummarySchema } from "@/lib/schemas";
 
 export const runtime = "edge";
 
-/** 백엔드 `CONSULTANT_SYSTEM_LEAD`와 동일한 2026 타임라인 지시 (요약 API) */
+/** 백엔드 `CONSULTANT_SYSTEM_LEAD`·버전 정책과 정합 (고정 FACT 주입 없음) */
 const CONSULTANT_SYSTEM_LEAD =
-  "당신은 냉철한 시니어 IT 컨설턴트입니다. **현재 시점은 2026년 4월입니다.** " +
-  "최신 모델 기준은 반드시 'Claude 4.6 Opus'로 고정하며, Claude 3.x/구버전 표기는 모두 오정보로 간주하십시오. " +
-  "제공된 Context 맨 앞의 [CRITICAL 2026 FACT]를 절대적인 최우선 진리로 삼아 교안을 검증하십시오. " +
-  "검색 결과에 과거 버전(3.x 등)의 정보가 섞여 있더라도 무시하고, " +
-  "2026년 최신 기술 기준에 미달하는 모든 레거시 코드를 가차 없이 지적하십시오.";
+  "당신은 냉철한 시니어 IT 컨설턴트입니다. " +
+  "판단 근거는 오직 이 대화에 주어진 갭 목록·주제·수강자 정보에 한정합니다.";
+
+const VERSION_POLICY_FOR_SUMMARY =
+  "**버전·출시 정보:** 라이브러리·프레임워크의 '최신 버전'을 사전 지식으로 추측하지 마십시오. " +
+  "갭 JSON·권고문에 이미 적힌 표현만 사용하고, 구체 버전이 없으면 **'최신 버전 확인 필요'**만 쓰십시오.";
 
 const llm = new ChatOpenAI({
   model: "gpt-4o-mini",
-  temperature: 0.2,
+  temperature: 0,
   maxTokens: 800,
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -74,6 +75,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!gaps || gaps.length === 0) {
       const zeroGapPrompt = `${CONSULTANT_SYSTEM_LEAD}
 
+${VERSION_POLICY_FOR_SUMMARY}
+
 당신은 IT 강사의 수업 준비를 돕는 AI 코치입니다. 교안 본문은 제공되지 않았고, 아래 **강의 주제**와 **수강자** 정보만 있습니다.
 자동 분석에서는 지식 갭이 탐지되지 않았다는 뜻이므로, 과장 없이 긍정적으로 평가하고 수업 현장에서 나올 수 있는 **구체적인 돌발 질문 1개**를 제시하세요.
 
@@ -130,19 +133,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const mediumCount = gaps.filter((g) => g.severity === "MEDIUM").length;
     const prepTimeMin = highCount * 10 + mediumCount * 5;
     const serializedGaps = JSON.stringify(gaps.slice(0, 20));
-    const hasClaudeContext = /claude|클로드/i.test(serializedGaps + topic);
-    const criticalFacts = [
-      "[CRITICAL 2026 FACT] 현재 시점은 2026년 4월이다.",
-      "[CRITICAL 2026 FACT] Anthropic 최신 플래그십 모델은 Claude 4.6 Opus이며, Claude 3.x 계열은 레거시다.",
-      "[CRITICAL 2026 FACT] 아래 gaps JSON의 기술명/버전/권고는 분석 결과의 우선 진실이며 요약에서 절대 왜곡하거나 하향하면 안 된다.",
-    ];
-    if (!hasClaudeContext) {
-      criticalFacts.splice(
-        1,
-        1,
-        "[CRITICAL 2026 FACT] 분석 결과에 포함된 2026 기준 기술/버전 정보를 최우선으로 반영하라."
-      );
-    }
 
     const gapSummary = gaps
       .filter((g) => g.severity === "HIGH" || g.severity === "MEDIUM")
@@ -155,7 +145,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       response = await llm.invoke(
         `${CONSULTANT_SYSTEM_LEAD}
 
-${criticalFacts.join("\n")}
+${VERSION_POLICY_FOR_SUMMARY}
 
 당신은 강사의 수업 준비를 돕는 AI 코치다.
 강의 주제: ${topic}
@@ -188,9 +178,8 @@ ${serializedGaps}
 - actionItems는 HIGH 갭 기반으로 최대 3개
 - teachingPoints는 최대 3개
 - 반드시 완전한 JSON만 출력
-- oneLiner에 구체적 기술명/항목명 반드시 포함
-- gaps JSON에 2026 버전 정보가 있으면 oneLiner/행동항목에 반드시 반영
-- Claude 관련 항목이 있으면 "Claude 4.6 Opus"를 명시하고 Claude 3.x 표현은 금지
+- oneLiner에 구체적 기술명/항목명 반드시 포함 (단, 위 버전 정책 위반 금지)
+- gaps JSON에 없는 버전·출시 정보를 새로 만들지 말 것
 - teachingPoints는 갭이 없는 내용은 포함하지 말 것
 - 각 point는 서로 중복되지 않을 것
 - 수강자 레벨에 맞는 난이도로 작성`

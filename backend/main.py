@@ -60,7 +60,9 @@ if OPENAI_API_KEY:
     try:
         llm = ChatOpenAI(
             model="gpt-4o-mini",
-            temperature=0.2,
+            temperature=0,
+            max_tokens=1600,
+            timeout=55,
             api_key=OPENAI_API_KEY,
         )
     except Exception:
@@ -128,50 +130,22 @@ class AnalyzeResponse(BaseModel):
 
 # --- Helpers: 포맷별 파싱 → 동일 청크 스키마로 통일 ---
 
-MAX_CHUNKS_PER_ANALYZE = 5
+MAX_CHUNKS_PER_ANALYZE = 3
 MAX_CONTENT_CHARS_PER_CHUNK = 20_000
 MAX_PDF_TOTAL_CHARS = 120_000
 PDF_HEAD_TAIL_WINDOW = 6_000
 
-# --- 2026 데모 타임라인 가드 (Tavily 과거 검색 결과와의 충돌 완화) ---
-
-_FACT_CLAUDE = (
-    "[CRITICAL 2026 FACT]: 현재 Anthropic의 최신 플래그십 모델은 'Claude 4.6 Opus'임. "
-    "(기존 3.x 시리즈는 완전 레거시). 4.6 버전은 Agentic 자동 디버깅 및 IDE 네이티브 통합이 표준임.\n\n"
-)
-_FACT_NEXT_REACT = (
-    "[CRITICAL 2026 FACT]: 현재 Next.js의 표준 버전은 16.2이며, React 19 네이티브 컴파일러가 기본 적용됨. "
-    "App Router의 초기 캐싱 이슈는 완전히 해결되었음.\n\n"
-)
-_FACT_PYTHON = (
-    "[CRITICAL 2026 FACT]: Python 3.14가 엔터프라이즈 표준임. "
-    "GIL(Global Interpreter Lock)이 완전히 해제된 Free-threaded 빌드가 기본으로 사용됨.\n\n"
-)
-
 CONSULTANT_SYSTEM_LEAD = (
-    "당신은 냉철한 시니어 IT 컨설턴트입니다. **현재 시점은 2026년 4월입니다.** "
-    "제공된 Context 맨 앞의 [CRITICAL 2026 FACT]를 절대적인 최우선 진리로 삼아 교안을 검증하십시오. "
-    "검색 결과에 과거 버전(3.x 등)의 정보가 섞여 있더라도 무시하고, "
-    "2026년 최신 기술 기준에 미달하는 모든 레거시 코드를 가차 없이 지적하십시오."
+    "당신은 냉철한 시니어 IT 컨설턴트입니다. "
+    "판단 근거는 오직 사용자 메시지의 [교안 원문]과 [최신 웹 정보](Tavily 검색 스니펫)에 한정합니다."
 )
 
-
-def inject_2026_context(chunk_text: str, web_context: str) -> str:
-    """
-    교안 청크 키워드에 맞춰 [CRITICAL 2026 FACT]를 웹 컨텍스트 문자열 맨 앞에 prepend.
-    Tavily 본문 앞에 삽입되어 LLM user 메시지의 [최신 웹 정보] 섹션 최상단에 위치함.
-    """
-    hay = chunk_text.lower()
-    blocks: List[str] = []
-    if re.search(r"\bclaude\b", hay) or "클로드" in chunk_text:
-        blocks.append(_FACT_CLAUDE)
-    if re.search(r"next\.js|nextjs|\breact\b", hay, re.IGNORECASE):
-        blocks.append(_FACT_NEXT_REACT)
-    if re.search(r"\bpython\b", hay) or "파이썬" in chunk_text:
-        blocks.append(_FACT_PYTHON)
-    if not blocks:
-        return web_context
-    return "".join(blocks) + web_context
+VERSION_AND_WEB_POLICY = (
+    "**버전·출시 정보(필수 준수):** 라이브러리·프레임워크·런타임·API의 '최신 버전'을 당신의 사전 지식으로 추측하지 마십시오. "
+    "반드시 [최신 웹 정보] 본문에 **문자 그대로 명시된** 버전·날짜만 인용·반영하십시오. "
+    "해당 본문에 버전이 없으면 구체 숫자를 지어내지 말고, 문구 **'최신 버전 확인 필요'**만 사용하십시오. "
+    "migratedCode·recommendation·expectedQuestion에도 동일 규칙을 적용합니다."
+)
 
 
 def extract_code_from_ipynb(content: bytes) -> List[dict]:
@@ -295,17 +269,17 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
             logging.exception("Tavily 검색 실패 — 웹 컨텍스트 없이 진행합니다.")
             search_result = {"results": []}
 
-    web_context = inject_2026_context(content, web_context)
-
-    # 2. LLM 분석
+    # 2. LLM 분석 (웹 컨텍스트는 Tavily 결과만 사용 — 고정 FACT 주입 없음)
     system_prompt = f"""{CONSULTANT_SYSTEM_LEAD}
+
+{VERSION_AND_WEB_POLICY}
 
 당신은 IT 강사의 교안을 분석하여 최신 트렌드와 어긋나는 '지식 갭'을 찾아내는 전문가입니다.
 대상 강의 주제: {topic}
 수강자 수준: {target}
 
 분석 규칙:
-1. 제공된 [교안 원문]이 최신 업계 표준이나 API(예: OpenAI, Claude 등)와 비교해 구식이거나 틀린 경우를 찾으십시오.
+1. 제공된 [교안 원문]이 [최신 웹 정보]에 나온 근거와 비교해 구식이거나 사실과 어긋나는 경우를 찾으십시오. 웹 정보가 비어 있거나 부족하면 보수적으로 판단하고, 버전 숫자는 절대 추측하지 마십시오.
 2. 발견된 경우, 수정된 코드(migratedCode)와 추천 답변을 제안하십시오.
 3. 반드시 JSON 리스트 형식으로만 응답하며, 갭이 없으면 빈 리스트 []를 반환하십시오.
 [

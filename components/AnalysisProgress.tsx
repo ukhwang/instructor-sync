@@ -36,6 +36,21 @@ export function AnalysisProgress() {
         <p className="text-sm text-muted-foreground mt-1">
           {isCompleted ? "결과를 확인하세요" : `${progress}% 처리 완료`}
         </p>
+        {!isCompleted && (
+          <div className="mt-5 space-y-2 text-left max-w-md mx-auto">
+            <p className="text-sm text-foreground/90 leading-relaxed motion-safe:animate-pulse">
+              AI가 최신 웹 데이터를 크롤링하고 교차 검증 중입니다. 최대 1~2분 정도 소요될 수 있습니다...
+            </p>
+            <div
+              className="flex justify-center gap-1 pt-1 motion-safe:opacity-90"
+              aria-hidden
+            >
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 motion-safe:animate-bounce [animation-delay:-0.2s]" />
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 motion-safe:animate-bounce [animation-delay:-0.1s]" />
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500 motion-safe:animate-bounce" />
+            </div>
+          </div>
+        )}
       </div>
 
       <Progress value={progress} className="h-2 motion-safe:transition-all motion-safe:duration-500" />
