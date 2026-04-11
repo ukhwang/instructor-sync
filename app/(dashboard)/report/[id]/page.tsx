@@ -33,16 +33,41 @@ export default async function ReportPage({
     .eq("report_id", id)
     .order("chunk_index");
 
-  const gaps: GapItem[] = (rawGaps ?? []).map((g) => ({
-    id: g.id,
-    chunkIndex: g.chunk_index,
-    originalText: g.original_text,
-    gapType: g.gap_type as GapItem["gapType"],
-    severity: g.severity as GapItem["severity"],
-    recommendation: g.recommendation,
-    webEvidence: g.web_evidence ?? [],
-    expectedQuestion: g.expected_question ?? undefined,
-  }));
+  type GapRow = {
+    id: string;
+    chunk_index: number;
+    original_text: string;
+    gap_type: string;
+    severity: string;
+    recommendation: string;
+    web_evidence: GapItem["webEvidence"] | null;
+    expected_question: string | null;
+    migrated_code?: string | null;
+    cell_index?: number | null;
+    page_number?: number | null;
+    meta?: unknown;
+  };
+
+  const gaps: GapItem[] = (rawGaps ?? []).map((row: GapRow) => {
+    const meta =
+      row.meta && typeof row.meta === "object" && !Array.isArray(row.meta)
+        ? (row.meta as { cellIndex?: number; pageNumber?: number; fileType?: "ipynb" | "pdf" })
+        : {};
+    return {
+      id: row.id,
+      chunkIndex: row.chunk_index,
+      originalText: row.original_text,
+      gapType: row.gap_type as GapItem["gapType"],
+      severity: row.severity as GapItem["severity"],
+      recommendation: row.recommendation,
+      webEvidence: row.web_evidence ?? [],
+      expectedQuestion: row.expected_question ?? undefined,
+      migratedCode: row.migrated_code ?? undefined,
+      cellIndex: row.cell_index ?? meta.cellIndex,
+      pageNumber: row.page_number ?? meta.pageNumber,
+      fileType: meta.fileType,
+    };
+  });
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -75,6 +100,7 @@ export default async function ReportPage({
           gaps={gaps}
           isAnalyzing={false}
           score={report.overall_score ?? 0}
+          summary={summary}
         />
       </div>
     </div>

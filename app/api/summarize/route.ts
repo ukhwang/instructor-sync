@@ -29,6 +29,40 @@ function fallbackSummaryBody(prepTimeMin: number, highCount: number) {
   };
 }
 
+/** LLM이 앞뒤에 잡담을 붙여도 `{` ~ 마지막 `}` 구간으로 복구 시도 */
+function parseJsonObjectFromLlmText(raw: string): Record<string, unknown> | null {
+  const s = raw.replace(/```json|```/g, "").trim();
+  try {
+    const o = JSON.parse(s) as unknown;
+    return o && typeof o === "object" && !Array.isArray(o) ? (o as Record<string, unknown>) : null;
+  } catch {
+    const start = s.indexOf("{");
+    const end = s.lastIndexOf("}");
+    if (start === -1 || end <= start) return null;
+    try {
+      const o = JSON.parse(s.slice(start, end + 1)) as unknown;
+      return o && typeof o === "object" && !Array.isArray(o) ? (o as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function sanitizeDefenseDrills(raw: unknown): { metaphor: string; pressureQuestion: string; talkTrack: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { metaphor: string; pressureQuestion: string; talkTrack: string }[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const d = item as Record<string, unknown>;
+    out.push({
+      metaphor: typeof d.metaphor === "string" ? d.metaphor : "",
+      pressureQuestion: typeof d.pressureQuestion === "string" ? d.pressureQuestion : "",
+      talkTrack: typeof d.talkTrack === "string" ? d.talkTrack : "",
+    });
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const { topic, targetAudience, gaps } = (await req.json()) as {
@@ -38,58 +72,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     };
 
     if (!gaps || gaps.length === 0) {
-      return NextResponse.json({
-        oneLiner:
-          "자동 탐지된 지식 갭은 없습니다. 다만 릴리즈 리뷰 수준의 시니어 질문(의존성 정합성, 런타임, 성능)까지 커버했는지 최종 브리핑으로 점검하시기 바랍니다.",
-        prepTime: "15분 (시니어 릴리즈 리뷰 시뮬레이션)",
-        actionItems: [
-          {
-            priority: 1,
-            action:
-              "교안 예제의 requirements / lockfile 기준으로 재현 가능한 설치 커맨드 한 줄을 확정하고, 왜 그 버전 범위인지 한 문장으로 근거를 말할 준비를 하세요.",
-            estimatedMin: 5,
-          },
-          {
-            priority: 2,
-            action:
-              "같은 코드 경로에 대해 '콜드 스타트 vs 지속 처리' 시나리오를 나누고, 지연·처리량·비용 중 무엇을 우선할지 트레이드오프를 표로 정리해 보세요.",
-            estimatedMin: 5,
-          },
-          {
-            priority: 3,
-            action:
-              "런타임·주요 라이브러리 메이저 업 시 깨질 수 있는 ABI/휠 이슈를 한 가지 가정하고, 스테이징 검증과 롤백 순서를 말로 시뮬레이션하세요.",
-            estimatedMin: 5,
-          },
-        ],
-        teachingPoints: [],
-        defenseDrills: [
-          {
-            metaphor:
-              "락파일(resolution)은 항공기 비행계획서와 같습니다. 이륙 전 정합성이 한 번이라도 깨지면, 어디까지 날았든 결국 착륙이 무엇보다 어렵습니다.",
-            pressureQuestion:
-              "같은 가상환경에서 LangChain 계열과 OpenAI SDK(또는 HTTP 클라이언트) 메이저가 동시에 올라와 transitive 의존성이 충돌했습니다. pip / uv / poetry 중 무엇으로 어떤 순서로 상·하한을 고정하고, CI에서는 어떤 규칙으로 재현성을 검증하시겠습니까?",
-            talkTrack:
-              "충돌 상위 3패키지를 먼저 식별하고, 각각 pinned range를 선언한 뒤 lockfile을 커밋합니다. CI에서는 frozen install로 스크립트만으로 동일 그래프가 재현되는지 검증한다고 답합니다.",
-          },
-          {
-            metaphor:
-              "토큰 파이프라인의 성능은 수업 첫 5분 집중도와 같습니다. '느린 첫 응답'은 설명이 정확해도 신뢰를 깎습니다.",
-            pressureQuestion:
-              "서버리스 워크로드와 장시간 배치 추론에서 TTFT, 초당 토큰/요청 처리량, 메모리 피크를 분리해 정의해 보세요. 수강생에게 어떤 지표를 어떤 순서로 제시하시겠습니까?",
-            talkTrack:
-              "워밍업, 배치 크기, 스트리밍, 캐시/양자화 중 이 워크로드에 맞는 한 가지씩만 골라, 대가(비용·지연·정확도)를 숫자 감으로 연결해 설명한다고 말합니다.",
-          },
-          {
-            metaphor:
-              "런타임 업그레이드는 하위호환 계약 없이 진행하면 롤밅이 불가능한 배포와 같습니다. ABI와 휠은 보이지 않는 계약서입니다.",
-            pressureQuestion:
-              "Python 마이너 또는 Node LTS 전환 시 C 확장·휠 의존성으로 빌드가 깨지는 경우를 가정해 보세요. 사전에 어떤 매트릭스로 막고, 실패 시 어떤 순서로 pin과 이미지 태그를 되돌리시겠습니까?",
-            talkTrack:
-              "멀티 버전 스테이징으로 한 단계씩 승격하고, 실패 시 컨테이너 digest·lockfile·런타임 세트를 묶어서 한 번에 롤백할 수 있게 해 둔다고 답합니다.",
-          },
-        ],
-      });
+      const zeroGapPrompt = `${CONSULTANT_SYSTEM_LEAD}
+
+당신은 IT 강사의 수업 준비를 돕는 AI 코치입니다. 교안 본문은 제공되지 않았고, 아래 **강의 주제**와 **수강자** 정보만 있습니다.
+자동 분석에서는 지식 갭이 탐지되지 않았다는 뜻이므로, 과장 없이 긍정적으로 평가하고 수업 현장에서 나올 수 있는 **구체적인 돌발 질문 1개**를 제시하세요.
+
+강의 주제: ${topic}
+수강자: ${targetAudience}
+
+반드시 아래 JSON 형식만 출력하세요. 다른 텍스트·마크다운 금지.
+{
+  "oneLiner": "교안이 자동 검사 관점에서 양호함을 인정하는 1~2문장(주제·난이도에 맞게 구체적으로)",
+  "prepTime": "수업 전 권장 점검 시간 추정 (예: 10분)",
+  "actionItems": [],
+  "teachingPoints": [],
+  "defenseDrills": [
+    {
+      "metaphor": "핵심 개념을 한 문장 비유로",
+      "pressureQuestion": "이 주제·이 수강자층이 물어볼 법한 압박 질문 정확히 1개",
+      "talkTrack": "강사가 답변할 때의 방향·포인트 2~3문장"
+    }
+  ]
+}`;
+
+      try {
+        const zr = await llm.invoke(zeroGapPrompt);
+        const zrText = typeof zr.content === "string" ? zr.content : String(zr.content);
+        const parsedObj = parseJsonObjectFromLlmText(zrText);
+        if (!parsedObj) throw new Error("zero_gap_json");
+        const one = typeof parsedObj.oneLiner === "string" ? parsedObj.oneLiner.trim() : "";
+        const prep = typeof parsedObj.prepTime === "string" ? parsedObj.prepTime.trim() : "";
+        const result = {
+          oneLiner:
+            one ||
+            "자동 분석에서 구체적 갭은 발견되지 않았습니다. 주제에 맞춰 수업 흐름과 질의응답을 한 번 더 점검해 보세요.",
+          prepTime: prep || "15분",
+          actionItems: Array.isArray(parsedObj.actionItems) ? parsedObj.actionItems : [],
+          teachingPoints: Array.isArray(parsedObj.teachingPoints) ? parsedObj.teachingPoints : [],
+          defenseDrills: sanitizeDefenseDrills(parsedObj.defenseDrills),
+        };
+        const validated = ReportSummarySchema.safeParse(result);
+        return NextResponse.json(validated.success ? validated.data : result);
+      } catch {
+        const fallback = {
+          oneLiner:
+            "자동 분석에서 지식 갭은 탐지되지 않았습니다. 요약을 생성하는 동안 일시적 오류가 있었으니, 잠시 후 요약 재시도를 이용해 주세요.",
+          prepTime: "15분",
+          actionItems: [] as { priority: number; action: string; estimatedMin: number }[],
+          teachingPoints: [] as { point: string; why: string; tip: string }[],
+          defenseDrills: [] as { metaphor: string; pressureQuestion: string; talkTrack: string }[],
+        };
+        return NextResponse.json(fallback);
+      }
     }
 
     const highCount = gaps.filter((g) => g.severity === "HIGH").length;

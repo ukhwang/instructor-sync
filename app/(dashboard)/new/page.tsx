@@ -81,13 +81,13 @@ export default function NewAnalysisPage() {
     }
     setReportId(report.id);
 
-    // 2. 크레딧 차감
-    const { error: creditError } = await supabase
-      .rpc('decrement_credit', { user_id: user.id });
+    // 2. 크레딧 차감 (FastAPI 분석 실패·타임아웃 시 아래 catch에서 복구)
+    const { error: creditError } = await supabase.rpc("decrement_credit");
     if (creditError) {
       toast.error("크레딧 차감 실패. 다시 시도해주세요.");
       return;
     }
+    let creditDebited = true;
 
     try {
       // 3. 백엔드 통합 분석 실행
@@ -110,7 +110,7 @@ export default function NewAnalysisPage() {
 
       if (updateError) console.error("Report update error:", updateError);
 
-      // 5. gap_items 저장
+      // 5. gap_items 저장 (migrated_code·셀/페이지 메타는 DB 컬럼으로 일원화)
       if (currentGapItems.length > 0) {
         await supabase.from("gap_items").insert(
           currentGapItems.map((g) => ({
@@ -122,13 +122,22 @@ export default function NewAnalysisPage() {
             recommendation: g.recommendation,
             web_evidence: g.webEvidence,
             expected_question: g.expectedQuestion ?? null,
-            meta: { cellIndex: g.cellIndex, pageNumber: g.pageNumber, fileType: g.fileType }
+            migrated_code: g.migratedCode ?? null,
+            cell_index: g.cellIndex ?? null,
+            page_number: g.pageNumber ?? null,
+            meta: { fileType: g.fileType },
           }))
         );
       }
 
       toast.success("분석이 완료되었습니다!");
     } catch (err) {
+      if (creditDebited) {
+        const { error: rollbackErr } = await supabase.rpc("increment_credit");
+        if (rollbackErr) {
+          console.error("increment_credit rollback failed:", rollbackErr);
+        }
+      }
       const errorMessage = err instanceof Error ? err.message : "분석 중 오류가 발생했습니다.";
       toast.error(errorMessage);
       setAnalysisStatus("error");

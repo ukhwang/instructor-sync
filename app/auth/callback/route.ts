@@ -1,44 +1,51 @@
-import { NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
-  const code = searchParams.get('code')
-  // next 파라미터가 없으면 무조건 /dashboard로 강제 이동시킨다
-  const next = searchParams.get('next') ?? '/dashboard'
+  const requestUrl = new URL(request.url);
+  const code = requestUrl.searchParams.get("code");
+  const nextPath = requestUrl.searchParams.get("next") || "/dashboard";
+
+  let authResponse = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return authResponse.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            authResponse.cookies.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
 
   if (code) {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // The `setAll` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing user sessions.
-            }
-          },
-        },
-      }
-    )
-
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      // 인증 성공 시 대시보드로 꽂아버린다
-      return NextResponse.redirect(`${origin}${next}`)
+      const redirectUrl = new URL(nextPath, requestUrl.origin);
+      const redirectResponse = NextResponse.redirect(redirectUrl);
+      authResponse.cookies.getAll().forEach((cookie) => {
+        redirectResponse.cookies.set(cookie);
+      });
+      return redirectResponse;
     }
   }
 
-  // 에러 발생 시 로그인 페이지로 복귀
-  return NextResponse.redirect(`${origin}/login?error=auth_failed`)
+  const errorUrl = new URL("/login", requestUrl.origin);
+  errorUrl.searchParams.set("error", "auth_failed");
+  const errorResponse = NextResponse.redirect(errorUrl);
+  authResponse.cookies.getAll().forEach((cookie) => {
+    errorResponse.cookies.set(cookie);
+  });
+  return errorResponse;
 }

@@ -67,6 +67,8 @@ class WebEvidence(BaseModel):
     snippet: str
 
 class GapItem(BaseModel):
+    """분석 응답 항목. Next.js 앱이 동일 필드를 Supabase `gap_items`에 컬럼으로 저장한다
+    (migrated_code, cell_index, page_number 등). FastAPI는 파일 파싱·LLM만 담당한다."""
     id: str
     chunkIndex: int
     cellIndex: Optional[int] = None
@@ -258,11 +260,11 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
     user_prompt = f"[교안 원문]\n{content}\n\n[최신 웹 정보]\n{web_context}"
 
     try:
-        response = llm.invoke(
+        response = await llm.ainvoke(
             [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
         )
     except Exception:
-        logging.exception("LLM invoke 실패 — 이 청크는 갭 없이 건너뜁니다.")
+        logging.exception("LLM ainvoke 실패 — 이 청크는 갭 없이 건너뜁니다.")
         return []
 
     content_str = (

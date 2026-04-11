@@ -35,17 +35,12 @@ export default async function LandingPage() {
           </div>
           <span className="font-bold">I.K.S</span>
         </div>
-        <div className="flex items-center gap-3">
-          <a href="/login" className="text-sm text-muted-foreground hover:text-foreground">
-            로그인
-          </a>
-          <a
-            href="/signup"
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            무료 시작
-          </a>
-        </div>
+        <a
+          href="/login"
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+        >
+          로그인
+        </a>
       </header>
 
       {/* 히어로 */}
@@ -63,18 +58,12 @@ export default async function LandingPage() {
           PDF 교안을 업로드하면 최신 웹 데이터와 자동 대조하여
           구식 정보와 누락된 트렌드를 10분 이내에 파악합니다.
         </p>
-        <div className="flex items-center justify-center gap-4 pt-4">
-          <a
-            href="/signup"
-            className="px-8 py-3.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors text-lg"
-          >
-            무료로 시작하기 →
-          </a>
+        <div className="flex items-center justify-center pt-4">
           <a
             href="/login"
-            className="px-8 py-3.5 rounded-xl border font-semibold hover:bg-accent transition-colors text-lg"
+            className="px-8 py-3.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors text-lg min-w-[200px] text-center"
           >
-            로그인
+            로그인하고 시작하기 →
           </a>
         </div>
         <p className="text-sm text-muted-foreground">무료 플랜 · 분석 3회 제공 · 신용카드 불필요</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { ReportSummary } from "@/lib/schemas";
-import { Clock, CheckCircle, AlertCircle } from "lucide-react";
+import { Clock, CheckCircle, AlertCircle, MessageCircleWarning } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ReportSummaryCardProps {
@@ -152,6 +152,34 @@ export function ReportSummaryCard({ summary, isLoading, isError, onRetry, isRetr
               <p className="text-xs text-slate-500 italic">
                 💡 {tp.tip}
               </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {summary?.defenseDrills && summary.defenseDrills.length > 0 ? (
+        <div className="space-y-3 pt-1 border-t border-blue-100">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <MessageCircleWarning className="w-3.5 h-3.5" />
+            돌발 질문 디펜스 (AI 생성)
+          </p>
+          {summary.defenseDrills.map((drill, idx) => (
+            <div
+              key={idx}
+              className="rounded-xl border border-slate-200 bg-white p-4 space-y-2 shadow-sm"
+            >
+              <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide">
+                비유
+              </p>
+              <p className="text-sm text-slate-700 leading-relaxed">{drill.metaphor}</p>
+              <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide pt-1">
+                압박 질문
+              </p>
+              <p className="text-sm text-slate-900 font-medium leading-snug">{drill.pressureQuestion}</p>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide pt-1">
+                권장 답변 방향
+              </p>
+              <p className="text-sm text-slate-600 leading-relaxed">{drill.talkTrack}</p>
             </div>
           ))}
         </div>
