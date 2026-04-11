@@ -1,30 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Brain, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const supabase = createClient();
 
-  const getSiteOrigin = () => {
-    return (
-      process.env.NEXT_PUBLIC_URL?.replace(/\/$/, "") ??
-      (typeof window !== "undefined" ? window.location.origin : "")
-    );
-  };
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "auth_failed") {
+      const detail = params.get("detail");
+      let decoded = "";
+      if (detail) {
+        try {
+          decoded = decodeURIComponent(detail);
+        } catch {
+          decoded = detail;
+        }
+      }
+      const msg = decoded
+        ? `로그인 실패: ${decoded}`
+        : "로그인 처리에 실패했습니다. Supabase Redirect URL·Google 리디렉션 URI를 확인해 주세요.";
+      toast.error(msg);
+      window.history.replaceState({}, "", "/login");
+    }
+  }, []);
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${getSiteOrigin()}/auth/callback?next=/dashboard`,
-      },
-    });
-    setIsLoading(false);
+    try {
+      // 반드시 현재 주소 기준 (초기 커밋과 동일). NEXT_PUBLIC_URL을 쓰면 프리뷰/별도 도메인에서 OAuth가 깨짐.
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+        },
+      });
+      if (error) {
+        toast.error(error.message || "Google 로그인을 시작할 수 없습니다.");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "로그인 요청 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
