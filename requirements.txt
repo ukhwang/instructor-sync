@@ -1,0 +1,13 @@
+# Hugging Face Space 빌드: 리포 루트의 requirements.txt를 pip가 설치합니다.
+# backend/main.py 실행에 필요한 패키지 (하한 버전 — HF에서 상위 호환으로 설치됨)
+fastapi>=0.115.6
+uvicorn[standard]>=0.34.0
+python-multipart>=0.0.18
+pydantic>=2.10.0
+nbformat>=5.10.0
+pypdf>=5.0.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
+tavily-python>=0.5.0
+python-dotenv>=1.0.1

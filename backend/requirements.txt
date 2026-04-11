@@ -1,11 +1,12 @@
-# 재현성·보안 패치 반영을 위한 하한 버전 (HF Space에서 pip가 상위 호환 범위로 설치)
+# 로컬 `pip install -r backend/requirements.txt` 용 — 내용은 리포 루트 requirements.txt와 동일하게 유지
 fastapi>=0.115.6
 uvicorn[standard]>=0.34.0
 python-multipart>=0.0.18
 pydantic>=2.10.0
-# Jupyter / PDF 하이브리드 파서
 nbformat>=5.10.0
 pypdf>=5.0.0
+langchain-core>=0.3.0
 langchain-openai>=0.2.0
+langchain-community>=0.3.0
 tavily-python>=0.5.0
 python-dotenv>=1.0.1
