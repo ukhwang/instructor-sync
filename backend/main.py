@@ -3,9 +3,11 @@ import io
 import json
 import time
 import re
+import asyncio
 import logging
 import nbformat
 from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +19,7 @@ _START_TIME = time.time()
 
 # LangChain imports
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from tavily import TavilyClient
 
 # 1. Load environment variables from parent directory explicitly
@@ -53,11 +55,49 @@ except Exception:
     tavily = None
     logging.exception("TavilyClient 초기화 실패 — 검색 없이 동작합니다.")
 
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0.2,
-    api_key=OPENAI_API_KEY,
-)
+llm: Optional[ChatOpenAI] = None
+if OPENAI_API_KEY:
+    try:
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            temperature=0.2,
+            api_key=OPENAI_API_KEY,
+        )
+    except Exception:
+        logging.exception("ChatOpenAI 초기화 실패")
+        llm = None
+else:
+    logging.error("OPENAI_API_KEY 없음 — /api/analyze LLM 단계는 사용할 수 없습니다.")
+
+
+async def _invoke_llm(messages: List[BaseMessage]) -> Any:
+    """ainvoke 미지원·런타임 차이에 대비해 동기 invoke는 스레드로 오프로딩."""
+    if llm is None:
+        raise RuntimeError("OPENAI_API_KEY가 없거나 LLM 초기화에 실패했습니다.")
+    ainvoke = getattr(llm, "ainvoke", None)
+    if callable(ainvoke):
+        return await ainvoke(messages)
+    return await asyncio.to_thread(llm.invoke, messages)
+
+
+def _tavily_result_rows(search_result: Any) -> List[dict]:
+    """Tavily 응답 스키마 차이로 인한 KeyError 방지."""
+    if not isinstance(search_result, dict):
+        return []
+    raw = search_result.get("results")
+    if not isinstance(raw, list):
+        return []
+    rows: List[dict] = []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        title = str(r.get("title") or "")
+        url = str(r.get("url") or "")
+        body = r.get("content") if r.get("content") is not None else r.get("snippet")
+        content = str(body or "")
+        rows.append({"title": title, "url": url, "content": content})
+    return rows
+
 
 # --- Models ---
 
@@ -136,7 +176,11 @@ def inject_2026_context(chunk_text: str, web_context: str) -> str:
 
 def extract_code_from_ipynb(content: bytes) -> List[dict]:
     """Jupyter Notebook에서 코드 셀만 추출 (노트북 셀 인덱스 보존)."""
-    nb = nbformat.reads(content.decode("utf-8"), as_version=4)
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text = content.decode("utf-8", errors="replace")
+    nb = nbformat.reads(text, as_version=4)
     code_cells: List[dict] = []
     for i, cell in enumerate(nb.cells):
         if cell.cell_type == "code":
@@ -149,16 +193,31 @@ def extract_full_text_from_pdf(content: bytes) -> List[dict]:
     pypdf + BytesIO로 디스크 없이 PDF 전 페이지 텍스트를 추출해 하나의 문자열로 합칩니다.
     이후 파이프라인은 ipynb와 동일하게 chunk 리스트(단일 항목)로 처리합니다.
     """
-    reader = PdfReader(io.BytesIO(content))
+    if not content:
+        return []
+    if len(content) > 50 * 1024 * 1024:
+        raise ValueError("PDF 파일이 50MB를 초과합니다.")
+
+    try:
+        reader = PdfReader(io.BytesIO(content), strict=False)
+    except (PdfReadError, ValueError, OSError, MemoryError) as e:
+        logging.exception("PDF 열기/파싱 실패")
+        raise ValueError(f"PDF를 읽을 수 없습니다: {e}") from e
+
     parts: List[str] = []
-    for page in reader.pages:
-        try:
-            raw = page.extract_text()
-        except Exception:
-            logging.warning("PDF 페이지 텍스트 추출 실패 — 해당 페이지 스킵")
-            continue
-        if raw and raw.strip():
-            parts.append(_normalize_text_for_llm(raw.strip()))
+    try:
+        for page in reader.pages:
+            try:
+                raw = page.extract_text()
+            except Exception:
+                logging.warning("PDF 페이지 텍스트 추출 실패 — 해당 페이지 스킵")
+                continue
+            if raw and raw.strip():
+                parts.append(_normalize_text_for_llm(raw.strip()))
+    except Exception as e:
+        logging.exception("PDF 페이지 순회 실패")
+        raise ValueError(f"PDF 텍스트 추출 중 오류: {e}") from e
+
     merged = "\n\n".join(parts).strip()
     if not merged:
         return []
@@ -214,21 +273,24 @@ def _parse_llm_gap_json(raw: str) -> List[dict]:
     return []
 
 async def analyze_gap(content: str, topic: str, target: str, index: int, source_type: str) -> List[GapItem]:
+    """RAG 파이프라인으로 지식 갭 분석."""
     content = _truncate_for_llm(_normalize_text_for_llm(content), MAX_CONTENT_CHARS_PER_CHUNK, 8_000)
     if not content:
         return []
 
-    """RAG 파이프라인으로 지식 갭 분석"""
     # 1. Tavily 검색 리서치
     search_query = f"Latest updates and common pitfalls for {topic} in context of: {content[:200]}"
     search_result: dict = {"results": []}
     web_context = "No recent web data found."
     if tavily is not None:
         try:
-            search_result = tavily.search(query=search_query, search_depth="basic", max_results=2)
-            web_context = "\n".join(
-                [f"Source: {r['url']}\nContent: {r['content']}" for r in search_result.get("results", [])]
-            )
+            raw = tavily.search(query=search_query, search_depth="basic", max_results=2)
+            search_result = raw if isinstance(raw, dict) else {"results": []}
+            rows = _tavily_result_rows(search_result)
+            if rows:
+                web_context = "\n".join(
+                    [f"Source: {r['url']}\nContent: {r['content']}" for r in rows]
+                )
         except Exception:
             logging.exception("Tavily 검색 실패 — 웹 컨텍스트 없이 진행합니다.")
             search_result = {"results": []}
@@ -260,11 +322,11 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
     user_prompt = f"[교안 원문]\n{content}\n\n[최신 웹 정보]\n{web_context}"
 
     try:
-        response = await llm.ainvoke(
+        response = await _invoke_llm(
             [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
         )
     except Exception:
-        logging.exception("LLM ainvoke 실패 — 이 청크는 갭 없이 건너뜁니다.")
+        logging.exception("LLM 호출 실패 — 이 청크는 갭 없이 건너뜁니다.")
         return []
 
     content_str = (
@@ -272,6 +334,7 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
     )
     raw_gaps = _parse_llm_gap_json(content_str)
 
+    tavily_rows = _tavily_result_rows(search_result if isinstance(search_result, dict) else {})
     gaps: List[GapItem] = []
     for rg in raw_gaps:
         try:
@@ -287,8 +350,12 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
                     severity=rg["severity"],
                     recommendation=rg["recommendation"],
                     webEvidence=[
-                        WebEvidence(title=r["title"], url=r["url"], snippet=r["content"][:100])
-                        for r in search_result.get("results", [])
+                        WebEvidence(
+                            title=tr["title"],
+                            url=tr["url"],
+                            snippet=(tr["content"] or "")[:100],
+                        )
+                        for tr in tavily_rows
                     ],
                     expectedQuestion=rg.get("expectedQuestion"),
                 )
@@ -312,6 +379,7 @@ async def health_check():
         "uptime_seconds": round(time.time() - _START_TIME),
         "keys_loaded": {
             "openai": bool(OPENAI_API_KEY),
+            "openai_llm_ready": llm is not None,
             "tavily": bool(TAVILY_API_KEY),
         }
     }
@@ -322,16 +390,26 @@ async def analyze_file(
     topic: str = Form(...),
     targetAudience: str = Form(...)
 ):
-    """파일 타입에 따라 파싱 후 지식 갭 분석 실행 (내부 에러 로깅)"""
+    """파일 타입에 따라 파싱 후 지식 갭 분석 실행."""
     try:
         content = await file.read()
         filename = (file.filename or "").lower()
 
         if filename.endswith(".ipynb"):
-            chunks = extract_code_from_ipynb(content)
+            try:
+                chunks = extract_code_from_ipynb(content)
+            except Exception as e:
+                logging.exception("ipynb 파싱 실패")
+                raise HTTPException(status_code=500, detail=f"노트북 파싱 실패: {e}") from e
             source_type = "ipynb"
         elif filename.endswith(".pdf"):
-            chunks = extract_full_text_from_pdf(content)
+            try:
+                chunks = extract_full_text_from_pdf(content)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            except Exception as e:
+                logging.exception("PDF 파싱 실패")
+                raise HTTPException(status_code=500, detail=f"PDF 처리 오류: {e}") from e
             source_type = "pdf"
         else:
             raise HTTPException(
@@ -339,22 +417,28 @@ async def analyze_file(
                 detail="Only .ipynb or .pdf files are supported",
             )
 
-        all_gaps = []
+        if chunks and llm is None:
+            raise HTTPException(
+                status_code=500,
+                detail="OPENAI_API_KEY가 설정되지 않았거나 LLM 초기화에 실패했습니다. 서버 환경 변수를 확인하세요.",
+            )
+
+        all_gaps: List[GapItem] = []
         for chunk in chunks[:MAX_CHUNKS_PER_ANALYZE]:
             gaps = await analyze_gap(
-                chunk["content"], 
-                topic, 
-                targetAudience, 
+                chunk["content"],
+                topic,
+                targetAudience,
                 chunk.get("cell_index") or chunk.get("page_num"),
-                source_type
+                source_type,
             )
             all_gaps.extend(gaps)
-            
+
         return {
             "chunks": chunks,
             "gaps": all_gaps,
             "hasGaps": len(all_gaps) > 0,
-            "sourceType": source_type
+            "sourceType": source_type,
         }
     except HTTPException:
         raise
@@ -362,20 +446,14 @@ async def analyze_file(
         logging.exception("analyze_file 실패")
         err = str(e).lower()
         if "timeout" in err or "timed out" in err or "read timed out" in err:
-            return {
-                "chunks": [],
-                "gaps": [],
-                "hasGaps": False,
-                "sourceType": "unknown",
-                "errorMessage": "현재 분석 서버 부하로 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.",
-            }
-        return {
-            "chunks": [],
-            "gaps": [],
-            "hasGaps": False,
-            "sourceType": "unknown",
-            "errorMessage": "분석 처리 중 오류가 발생했지만 서버는 안전하게 복구되었습니다. 잠시 후 다시 시도해 주세요.",
-        }
+            raise HTTPException(
+                status_code=503,
+                detail="현재 분석 서버 부하로 응답이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.",
+            ) from e
+        raise HTTPException(
+            status_code=500,
+            detail=str(e) or repr(e),
+        ) from e
 
 @app.post("/api/export")
 async def export_patched_notebook(
