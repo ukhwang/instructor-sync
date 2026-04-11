@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { GapItem, ReportSummary } from "@/lib/schemas";
+import { GapItem, LectureGuide, ReportSummary } from "@/lib/schemas";
 
 type AnalysisStatus = "idle" | "parsing" | "analyzing" | "completed" | "error";
 
@@ -7,6 +7,7 @@ interface AnalysisState {
     status: AnalysisStatus;
     progress: number; // 0~100
     gapItems: GapItem[];
+    lectureGuide: LectureGuide | null;
     summary: ReportSummary | null;
     summaryError: boolean;
     isRetryingSummary: boolean;
@@ -15,6 +16,7 @@ interface AnalysisState {
     setAnalysisStatus: (status: AnalysisStatus) => void;
     setAnalysisProgress: (progress: number) => void;
     addGapItems: (items: GapItem[]) => void;
+    setLectureGuide: (guide: LectureGuide | null) => void;
     setSummary: (summary: ReportSummary) => void;
     setSummaryError: (hasError: boolean) => void;
     setIsRetryingSummary: (isRetrying: boolean) => void;
@@ -26,6 +28,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     status: "idle",
     progress: 0,
     gapItems: [],
+    lectureGuide: null,
     summary: null,
     summaryError: false,
     isRetryingSummary: false,
@@ -36,6 +39,8 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
     setAnalysisProgress: (progress) => set({ progress }),
 
     setSummary: (summary) => set({ summary }),
+
+    setLectureGuide: (lectureGuide) => set({ lectureGuide }),
 
     setSummaryError: (hasError) => set({ summaryError: hasError }),
     setIsRetryingSummary: (isRetrying) => set({ isRetryingSummary: isRetrying }),
@@ -56,6 +61,7 @@ export const useAnalysisStore = create<AnalysisState>((set) => ({
       status: "idle", 
       progress: 0, 
       gapItems: [], 
+      lectureGuide: null,
       summary: null, 
       summaryError: false,
       isRetryingSummary: false,

@@ -31,6 +31,45 @@ export const ReportSummarySchema = z.object({
 });
 
 export type ReportSummary = z.infer<typeof ReportSummarySchema>;
+
+/** 백엔드·Supabase `lecture_guide` JSON과 동일 스키마 (quickLab 권장) */
+export const LectureGuideSchema = z
+  .object({
+    emphasis: z.array(z.string()).optional(),
+    analogies: z.array(z.string()).optional(),
+    faq: z.array(z.string()).optional(),
+    quickLab: z.array(z.string()).optional(),
+    quick_lab: z.array(z.string()).optional(),
+  })
+  .passthrough();
+
+export type LectureGuide = {
+  emphasis: string[];
+  analogies: string[];
+  faq: string[];
+  quickLab: string[];
+};
+
+export function parseLectureGuide(raw: unknown): LectureGuide | null {
+  const r = LectureGuideSchema.safeParse(raw);
+  if (!r.success) return null;
+  const d = r.data;
+  const quickLab = d.quickLab ?? d.quick_lab ?? [];
+  const out: LectureGuide = {
+    emphasis: d.emphasis ?? [],
+    analogies: d.analogies ?? [],
+    faq: d.faq ?? [],
+    quickLab: Array.isArray(quickLab) ? quickLab : [],
+  };
+  return isLectureGuidePopulated(out) ? out : null;
+}
+
+export function isLectureGuidePopulated(g: LectureGuide | null | undefined): boolean {
+  if (!g) return false;
+  const n = (a: string[]) => a.filter((s) => s.trim().length > 0).length;
+  return n(g.emphasis) + n(g.analogies) + n(g.faq) + n(g.quickLab) > 0;
+}
+
 export interface WebEvidence {
   title: string;
   url: string;

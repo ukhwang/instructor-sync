@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { toast } from "sonner";
 import { Loader2, ShieldCheck, Clock, CheckCircle2, Swords, MessageCircleWarning } from "lucide-react";
+import { isLectureGuidePopulated } from "@/lib/schemas";
 
 export default function NewAnalysisPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -24,7 +25,7 @@ export default function NewAnalysisPage() {
   const { extractAndChunk, isProcessing } = usePdfProcessor();
   const { runAnalysis, retrySummary, downloadPatchedFile } = useGapAnalysis();
   const { 
-    status, progress, gapItems, summary, setAnalysisStatus, resetAnalysis,
+    status, progress, gapItems, lectureGuide, summary, setAnalysisStatus, resetAnalysis,
     summaryError, isRetryingSummary, summaryRetryCount 
   } = useAnalysisStore();
 
@@ -96,6 +97,7 @@ export default function NewAnalysisPage() {
 
       // 4. 최종 리포트 업데이트
       const currentGapItems = useAnalysisStore.getState().gapItems;
+      const currentLectureGuide = useAnalysisStore.getState().lectureGuide;
       const score = Math.max(0, 100 - currentGapItems.length * 5);
       
       const { error: updateError } = await supabase
@@ -105,6 +107,7 @@ export default function NewAnalysisPage() {
           total_gaps: currentGapItems.length,
           overall_score: score,
           summary: useAnalysisStore.getState().summary,
+          lecture_guide: currentLectureGuide,
         })
         .eq("id", report.id);
 
@@ -214,7 +217,7 @@ export default function NewAnalysisPage() {
       {isRunning && <AnalysisProgress />}
 
       {/* 실시간 결과 (분석 중에도 표시) */}
-      {(isRunning || isCompleted) && gapItems.length > 0 && (
+      {(isRunning || isCompleted) && (gapItems.length > 0 || isLectureGuidePopulated(lectureGuide)) && (
         <GapReportViewer
           gaps={gapItems}
           isAnalyzing={isRunning}
@@ -226,11 +229,12 @@ export default function NewAnalysisPage() {
           summaryRetryCount={summaryRetryCount}
           onDownload={file ? () => downloadPatchedFile(file, gapItems) : undefined}
           fileType={file?.name.toLowerCase().endsWith(".pdf") ? "pdf" : "ipynb"}
+          lectureGuide={lectureGuide}
         />
       )}
 
       {/* 갭 없음 — Defense Simulator Briefing */}
-      {isCompleted && gapItems.length === 0 && (
+      {isCompleted && gapItems.length === 0 && !isLectureGuidePopulated(lectureGuide) && (
         <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-green-50 p-6 space-y-5 shadow-sm">
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center shadow-md">

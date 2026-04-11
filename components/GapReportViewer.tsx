@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { GapItem, ReportSummary } from "@/lib/schemas";
+import { GapItem, isLectureGuidePopulated, LectureGuide, ReportSummary } from "@/lib/schemas";
+import { LectureGuideCard } from "./LectureGuideCard";
 import { ReportSummaryCard } from "./ReportSummaryCard";
 import { GapBadge } from "./GapBadge";
 import { EvidenceDrawer } from "./EvidenceDrawer";
@@ -21,11 +22,12 @@ interface GapReportViewerProps {
   summaryRetryCount?: number;
   onDownload?: () => void;
   fileType?: "ipynb" | "pdf";
+  lectureGuide?: LectureGuide | null;
 }
 
 type SeverityFilter = "ALL" | "HIGH" | "MEDIUM" | "LOW";
 
-export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryError, onRetrySummary, isRetryingSummary, summaryRetryCount = 0, onDownload, fileType }: GapReportViewerProps) {
+export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryError, onRetrySummary, isRetryingSummary, summaryRetryCount = 0, onDownload, fileType, lectureGuide = null }: GapReportViewerProps) {
   const [selectedGap, setSelectedGap] = useState<GapItem | null>(null);
   const [filter, setFilter] = useState<SeverityFilter>("HIGH");
 
@@ -86,7 +88,7 @@ export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryEr
 
       {/* 갭 리스트 */}
       <div className="space-y-3">
-        {isAnalyzing && gaps.length === 0 && (
+        {isAnalyzing && gaps.length === 0 && !isLectureGuidePopulated(lectureGuide) && (
           <div className="space-y-3 animate-pulse">
             {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-24 w-full rounded-xl motion-safe:transition-opacity motion-safe:duration-500" />
@@ -130,12 +132,25 @@ export function GapReportViewer({ gaps, isAnalyzing, score, summary, isSummaryEr
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-8 text-center space-y-2">
             <p className="font-semibold text-slate-900">자동 분석에서 지식 갭이 탐지되지 않았습니다.</p>
             <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
-              돌발 질문·비유 코칭은 상단 <span className="font-medium text-slate-700">AI 코치 요약</span>에 동적으로 생성된 내용이
-              있으면 함께 표시됩니다.
+              {isLectureGuidePopulated(lectureGuide) ? (
+                <>
+                  아래 <span className="font-medium text-slate-700">AI 교수용 가이드</span>에서 강조점·비유·예상 질문·실습 아이디어를
+                  확인해 보세요.
+                </>
+              ) : (
+                <>
+                  돌발 질문·비유 코칭은 상단 <span className="font-medium text-slate-700">AI 코치 요약</span>에 동적으로 생성된 내용이
+                  있으면 함께 표시됩니다.
+                </>
+              )}
             </p>
           </div>
         )}
       </div>
+
+      {isLectureGuidePopulated(lectureGuide) && lectureGuide ? (
+        <LectureGuideCard guide={lectureGuide} />
+      ) : null}
 
       <EvidenceDrawer
         gap={selectedGap}

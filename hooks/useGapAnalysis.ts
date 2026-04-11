@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useAnalysisStore } from "@/store/analysisStore";
-import { ReportSummarySchema, GapItem } from "@/lib/schemas";
+import { ReportSummarySchema, GapItem, parseLectureGuide } from "@/lib/schemas";
 import {
   ANALYZE_FETCH_TIMEOUT_MS,
   mapAnalyzeHttpStatus,
@@ -27,6 +27,7 @@ interface UseGapAnalysisReturn {
 export function useGapAnalysis(): UseGapAnalysisReturn {
   const { 
     addGapItems, setAnalysisProgress, setAnalysisStatus, setSummary, setSummaryError,
+    setLectureGuide,
     summaryRetryCount, incrementSummaryRetryCount, setIsRetryingSummary
   } = useAnalysisStore();
 
@@ -92,6 +93,9 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
 
         setAnalysisProgress(80);
 
+        const lgRaw = data.lectureGuide ?? data.lecture_guide;
+        setLectureGuide(parseLectureGuide(lgRaw));
+
         if (data.gaps.length > 0) {
           const st = data.sourceType === "pdf" || data.sourceType === "ipynb" ? data.sourceType : undefined;
           const gapsWithContext = (data.gaps as GapItem[]).map((g) => ({
@@ -132,7 +136,7 @@ export function useGapAnalysis(): UseGapAnalysisReturn {
         throw new Error(message);
       }
     },
-    [addGapItems, setAnalysisProgress, setAnalysisStatus, setSummary, setSummaryError]
+    [addGapItems, setAnalysisProgress, setAnalysisStatus, setSummary, setSummaryError, setLectureGuide]
   );
 
   const retrySummary = useCallback(

@@ -12,7 +12,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional, Any, cast
+from typing import List, Optional, Any, Tuple, cast
 from dotenv import load_dotenv
 
 _START_TIME = time.time()
@@ -61,7 +61,7 @@ if OPENAI_API_KEY:
         llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0,
-            max_tokens=1600,
+            max_tokens=2000,
             timeout=55,
             api_key=OPENAI_API_KEY,
         )
@@ -108,6 +108,22 @@ class WebEvidence(BaseModel):
     url: str
     snippet: str
 
+class LectureGuide(BaseModel):
+    """교수 설계 힌트. API·프론트는 quickLab 키로 직렬화한다."""
+    emphasis: List[str] = Field(default_factory=list)
+    analogies: List[str] = Field(default_factory=list)
+    faq: List[str] = Field(default_factory=list)
+    quick_lab: List[str] = Field(default_factory=list)
+
+    def model_dump_api(self) -> dict:
+        return {
+            "emphasis": self.emphasis,
+            "analogies": self.analogies,
+            "faq": self.faq,
+            "quickLab": self.quick_lab,
+        }
+
+
 class GapItem(BaseModel):
     """분석 응답 항목. Next.js 앱이 동일 필드를 Supabase `gap_items`에 컬럼으로 저장한다
     (migrated_code, cell_index, page_number 등). FastAPI는 파일 파싱·LLM만 담당한다."""
@@ -127,6 +143,7 @@ class AnalyzeResponse(BaseModel):
     chunks: List[Any]
     gaps: List[GapItem]
     hasGaps: bool
+    lectureGuide: Optional[LectureGuide] = None
 
 # --- Helpers: 포맷별 파싱 → 동일 청크 스키마로 통일 ---
 
@@ -136,7 +153,7 @@ MAX_PDF_TOTAL_CHARS = 120_000
 PDF_HEAD_TAIL_WINDOW = 6_000
 
 CONSULTANT_SYSTEM_LEAD = (
-    "당신은 냉철한 시니어 IT 컨설턴트입니다. "
+    "당신은 냉철한 시니어 IT 컨설턴트이자 AI 교수 설계자(Instructional Designer)입니다. "
     "판단 근거는 오직 사용자 메시지의 [교안 원문]과 [최신 웹 정보](Tavily 검색 스니펫)에 한정합니다."
 )
 
@@ -144,7 +161,7 @@ VERSION_AND_WEB_POLICY = (
     "**버전·출시 정보(필수 준수):** 라이브러리·프레임워크·런타임·API의 '최신 버전'을 당신의 사전 지식으로 추측하지 마십시오. "
     "반드시 [최신 웹 정보] 본문에 **문자 그대로 명시된** 버전·날짜만 인용·반영하십시오. "
     "해당 본문에 버전이 없으면 구체 숫자를 지어내지 말고, 문구 **'최신 버전 확인 필요'**만 사용하십시오. "
-    "migratedCode·recommendation·expectedQuestion에도 동일 규칙을 적용합니다."
+    "migratedCode·recommendation·expectedQuestion·lecture_guide 문구에도 동일 규칙을 적용합니다."
 )
 
 
@@ -223,34 +240,151 @@ def _truncate_for_llm(text: str, max_chars: int, head_tail_window: int) -> str:
     combined = f"{head}{marker}{tail}"
     return combined[:max_chars]
 
-def _parse_llm_gap_json(raw: str) -> List[dict]:
-    """LLM 응답에서 JSON 배열만 안전하게 추출 (마크다운/노이즈 허용)."""
+def _json_from_llm_text(raw: str) -> Any:
+    """LLM 응답 문자열에서 JSON 객체 또는 배열을 최대한 복구."""
     s = raw.replace("```json", "").replace("```", "").strip()
     try:
-        data = json.loads(s)
-        if isinstance(data, list):
-            return cast(List[dict], data)
-        if isinstance(data, dict):
-            inner = data.get("gaps")
-            if isinstance(inner, list):
-                return cast(List[dict], inner)
+        return json.loads(s)
     except json.JSONDecodeError:
         pass
+    lb, rb = s.find("{"), s.rfind("}")
+    if lb != -1 and rb > lb:
+        try:
+            return json.loads(s[lb : rb + 1])
+        except json.JSONDecodeError:
+            pass
     start, end = s.find("["), s.rfind("]")
     if start != -1 and end > start:
         try:
-            data = json.loads(s[start : end + 1])
-            if isinstance(data, list):
-                return cast(List[dict], data)
+            return json.loads(s[start : end + 1])
         except json.JSONDecodeError:
             pass
+    return None
+
+
+def _parse_llm_analyze_payload(raw: str) -> Tuple[List[dict], Any]:
+    """갭 배열과 선택적 lecture_guide 원본을 분리 (구형 순수 배열 응답 호환)."""
+    data = _json_from_llm_text(raw)
+    if data is None:
+        return [], None
+    if isinstance(data, list):
+        return cast(List[dict], data), None
+    if isinstance(data, dict):
+        gaps = data.get("gaps")
+        if not isinstance(gaps, list):
+            gaps = []
+        lg = data.get("lecture_guide")
+        if lg is None:
+            lg = data.get("lectureGuide")
+        return cast(List[dict], gaps), lg
+    return [], None
+
+
+def _dedupe_preserve_order(items: List[str]) -> List[str]:
+    seen: set[str] = set()
+    out: List[str] = []
+    for x in items:
+        key = " ".join(x.split()).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(x)
+    return out
+
+
+def _coerce_string_list(val: Any) -> List[str]:
+    if val is None:
+        return []
+    if isinstance(val, str):
+        s = val.strip()
+        return [s] if s else []
+    if isinstance(val, list):
+        out: List[str] = []
+        for item in val:
+            if isinstance(item, str) and item.strip():
+                out.append(item.strip())
+        return out
     return []
 
-async def analyze_gap(content: str, topic: str, target: str, index: int, source_type: str) -> List[GapItem]:
-    """RAG 파이프라인으로 지식 갭 분석."""
+
+def _coerce_faq_list(val: Any) -> List[str]:
+    """FAQ: 문자열 또는 {q,a} 객체 리스트를 단일 블록 문자열로 정규화."""
+    if val is None:
+        return []
+    if isinstance(val, str):
+        s = val.strip()
+        return [s] if s else []
+    if not isinstance(val, list):
+        return []
+    out: List[str] = []
+    for item in val:
+        if isinstance(item, str) and item.strip():
+            out.append(item.strip())
+        elif isinstance(item, dict):
+            q = item.get("q") or item.get("question")
+            a = item.get("a") or item.get("answer")
+            lines: List[str] = []
+            if q is not None and str(q).strip():
+                lines.append(f"Q: {str(q).strip()}")
+            if a is not None and str(a).strip():
+                lines.append(f"A: {str(a).strip()}")
+            if lines:
+                out.append("\n".join(lines))
+    return out
+
+
+def _parse_lecture_guide_obj(raw: Any) -> Optional[LectureGuide]:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        emphasis = _coerce_string_list(raw.get("emphasis"))
+        analogies = _coerce_string_list(raw.get("analogies"))
+        faq = _coerce_faq_list(raw.get("faq"))
+        quick = _coerce_string_list(raw.get("quick_lab", raw.get("quickLab")))
+        lg = LectureGuide(
+            emphasis=emphasis,
+            analogies=analogies,
+            faq=faq,
+            quick_lab=quick,
+        )
+        if not (lg.emphasis or lg.analogies or lg.faq or lg.quick_lab):
+            return None
+        return lg
+    except (TypeError, ValueError):
+        logging.warning("lecture_guide 객체 형식 오류 — 해당 청크 가이드 스킵")
+        return None
+
+
+def _merge_lecture_guides(parts: List[Optional[LectureGuide]]) -> Optional[LectureGuide]:
+    em: List[str] = []
+    an: List[str] = []
+    fq: List[str] = []
+    ql: List[str] = []
+    for p in parts:
+        if p is None:
+            continue
+        em.extend(p.emphasis)
+        an.extend(p.analogies)
+        fq.extend(p.faq)
+        ql.extend(p.quick_lab)
+    merged = LectureGuide(
+        emphasis=_dedupe_preserve_order(em),
+        analogies=_dedupe_preserve_order(an),
+        faq=_dedupe_preserve_order(fq),
+        quick_lab=_dedupe_preserve_order(ql),
+    )
+    if not (merged.emphasis or merged.analogies or merged.faq or merged.quick_lab):
+        return None
+    return merged
+
+
+async def analyze_gap(
+    content: str, topic: str, target: str, index: int, source_type: str
+) -> Tuple[List[GapItem], Optional[LectureGuide]]:
+    """RAG 파이프라인으로 지식 갭 분석 및 선택적 교수 가이드."""
     content = _truncate_for_llm(_normalize_text_for_llm(content), MAX_CONTENT_CHARS_PER_CHUNK, 8_000)
     if not content:
-        return []
+        return [], None
 
     # 1. Tavily 검색 리서치
     search_query = f"Latest updates and common pitfalls for {topic} in context of: {content[:200]}"
@@ -274,24 +408,39 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
 
 {VERSION_AND_WEB_POLICY}
 
-당신은 IT 강사의 교안을 분석하여 최신 트렌드와 어긋나는 '지식 갭'을 찾아내는 전문가입니다.
+당신은 IT 강사의 교안을 분석하여 (1) 최신 트렌드와 어긋나는 '지식 갭'을 찾고, (2) 같은 교안을 바탕으로 수업 품질을 높이는 교수 가이드를 제안합니다.
 대상 강의 주제: {topic}
 수강자 수준: {target}
 
-분석 규칙:
-1. 제공된 [교안 원문]이 [최신 웹 정보]에 나온 근거와 비교해 구식이거나 사실과 어긋나는 경우를 찾으십시오. 웹 정보가 비어 있거나 부족하면 보수적으로 판단하고, 버전 숫자는 절대 추측하지 마십시오.
-2. 발견된 경우, 수정된 코드(migratedCode)와 추천 답변을 제안하십시오.
-3. 반드시 JSON 리스트 형식으로만 응답하며, 갭이 없으면 빈 리스트 []를 반환하십시오.
-[
-  {{
-    "originalText": "문제가 되는 구절",
-    "migratedCode": "최신 코드 제안 (없으면 null)",
-    "gapType": "OUTDATED",
-    "severity": "HIGH",
-    "recommendation": "수정 가이드",
-    "expectedQuestion": "똑똑한 학생이 던질법한 압박 질문"
+분석 규칙 (지식 갭):
+1. [교안 원문]을 [최신 웹 정보] 근거와 비교해 구식이거나 사실과 어긋나는 경우를 찾으십시오. 웹 정보가 비어 있거나 부족하면 보수적으로 판단하고, 버전 숫자는 절대 추측하지 마십시오.
+2. 발견 시 migratedCode·recommendation·expectedQuestion을 채우십시오. 갭이 없으면 gaps는 빈 배열 []입니다.
+
+교수 가이드 (lecture_guide, 동일 응답 내 필수 키 — 내용은 교안·웹 근거에 맞게 채우되 없으면 빈 배열):
+- emphasis: 수업에서 반드시 짚어야 할 기둥 개념 (짧은 문장 배열)
+- analogies: 기술 개념을 일상/비전공 눈높이로 풀 비유 (문장 배열)
+- faq: 학습자가 헷갈리거나 날카롭게 물을 수 있는 Q&A (문자열 배열. 각 항목은 "Q: ...\\nA: ..." 형식 권장)
+- quick_lab: 이론 직후 5분 내외 미니 실습 과제 (문장 배열)
+
+응답 형식: 반드시 아래 구조의 JSON 객체 **한 개만** (마크다운·설명 문장 없이).
+{{
+  "gaps": [
+    {{
+      "originalText": "문제가 되는 구절",
+      "migratedCode": "최신 코드 제안 (없으면 null)",
+      "gapType": "OUTDATED",
+      "severity": "HIGH",
+      "recommendation": "수정 가이드",
+      "expectedQuestion": "똑똑한 학생이 던질법한 압박 질문"
+    }}
+  ],
+  "lecture_guide": {{
+    "emphasis": [],
+    "analogies": [],
+    "faq": [],
+    "quick_lab": []
   }}
-]"""
+}}"""
 
     user_prompt = f"[교안 원문]\n{content}\n\n[최신 웹 정보]\n{web_context}"
 
@@ -301,12 +450,13 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
         )
     except Exception:
         logging.exception("LLM 호출 실패 — 이 청크는 갭 없이 건너뜁니다.")
-        return []
+        return [], None
 
     content_str = (
         response.content if isinstance(response.content, str) else str(response.content)
     )
-    raw_gaps = _parse_llm_gap_json(content_str)
+    raw_gaps, lg_raw = _parse_llm_analyze_payload(content_str)
+    lecture_guide = _parse_lecture_guide_obj(lg_raw)
 
     tavily_rows = _tavily_result_rows(search_result if isinstance(search_result, dict) else {})
     gaps: List[GapItem] = []
@@ -337,7 +487,7 @@ async def analyze_gap(content: str, topic: str, target: str, index: int, source_
         except (KeyError, TypeError, ValueError):
             logging.warning("갭 항목 필드 누락/형식 오류 — 해당 항목 스킵")
             continue
-    return gaps
+    return gaps, lecture_guide
 
 # --- Endpoints ---
 
@@ -398,8 +548,9 @@ async def analyze_file(
             )
 
         all_gaps: List[GapItem] = []
+        guide_parts: List[Optional[LectureGuide]] = []
         for chunk in chunks[:MAX_CHUNKS_PER_ANALYZE]:
-            gaps = await analyze_gap(
+            gaps, lecture_guide = await analyze_gap(
                 chunk["content"],
                 topic,
                 targetAudience,
@@ -407,12 +558,16 @@ async def analyze_file(
                 source_type,
             )
             all_gaps.extend(gaps)
+            guide_parts.append(lecture_guide)
+
+        merged_guide = _merge_lecture_guides(guide_parts)
 
         return {
             "chunks": chunks,
             "gaps": all_gaps,
             "hasGaps": len(all_gaps) > 0,
             "sourceType": source_type,
+            "lectureGuide": merged_guide.model_dump_api() if merged_guide else None,
         }
     except HTTPException:
         raise

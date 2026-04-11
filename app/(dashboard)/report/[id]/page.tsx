@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { GapReportViewer } from "@/components/GapReportViewer";
 import { FileText, Calendar, Users } from "lucide-react";
-import { GapItem, ReportSummary } from "@/lib/schemas";
+import { GapItem, parseLectureGuide, ReportSummary } from "@/lib/schemas";
 import { ReportSummaryCard } from "@/components/ReportSummaryCard";
 
 export default async function ReportPage({
@@ -26,6 +26,9 @@ export default async function ReportPage({
   if (!report) notFound();
 
   const summary = report.summary as ReportSummary | null;
+  const lectureGuide = parseLectureGuide(
+    (report as { lecture_guide?: unknown }).lecture_guide
+  );
 
   const { data: rawGaps } = await supabase
     .from("gap_items")
@@ -101,6 +104,7 @@ export default async function ReportPage({
           isAnalyzing={false}
           score={report.overall_score ?? 0}
           summary={summary}
+          lectureGuide={lectureGuide}
         />
       </div>
     </div>
