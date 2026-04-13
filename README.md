@@ -86,3 +86,11 @@ uvicorn main:app --reload
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `(선택) NEXT_PUBLIC_BACKEND_URL` (기본값: `http://localhost:8000`)
+
+## 🤝 AI Collaboration (AI 협업 증빙)
+
+본 프로젝트는 공모전 취지에 맞춰 AI 협업 과정을 문서화했습니다.
+
+- [AI 협업 보고서](docs/AI_COLLAB_REPORT.md)
+- [AI 협업 지침서](docs/AI_COLLAB_POLICY.md)
+- [AI 프롬프트 로그](docs/AI_PROMPT_LOG.md)
