@@ -1,96 +1,41 @@
----
-title: Instructor Sync API
-emoji: 🚀
-colorFrom: blue
-colorTo: green
-sdk: docker
-pinned: false
----
+# 운동숙제 (Exercise Homework)
 
-# 🎓 백스테이지 코치 (Backstage Coach)
+운동숙제는 강사가 카카오톡으로 회원별 운동 링크를 보내고, 회원의 완료 여부·통증·메모를 다음 수업 준비에 연결하는 Next.js 애플리케이션입니다. 현재 저장소의 제품 기준은 운동숙제이며, Git 기준 커밋에 남은 과거 강의 분석/FastAPI/LangChain 프로젝트는 현행 범위가 아닙니다.
 
-**수업 전 교강사를 위한 교안 점검 및 프리티칭 AI**  
-(프로젝트 코드명: Instructor's Knowledge Sync - I.K.S)
+## 현재 기술 기준
 
-![Next.js](https://img.shields.io/badge/Next.js-black?style=flat-square&logo=next.js)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white)
-![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white)
+- Next.js 16 App Router, React 19, TypeScript
+- Tailwind CSS, TanStack Query, Zustand
+- 현재 데이터/인증: Supabase Postgres, Supabase Auth, RLS, Security Definer RPC
+- 예정 방향: 자체 PostgreSQL용 합성 로컬 기반과 스키마는 구축·검증했습니다. 애플리케이션 데이터 경계·인증은 아직 전환하지 않았고 기존 Supabase는 유지합니다.
 
-## 📌 프로젝트 소개 (Overview)
+주요 화면은 강사용 `app/app/`, 회원 공개 링크 `app/h/[token]/`, 로그인 `app/login/`에 있습니다. 브라우저 데이터 접근은 `lib/db.ts`, 서버 데이터 접근은 `lib/db-server.ts`, 현재 SQL은 `supabase/migrations/`에 있습니다.
 
-AI/IT 기술 변화 속도가 빠른 환경에서, 교강사는 과거 교안(`.ipynb`, `.pdf`)이 현재 버전에서도 유효한지 반복 검증해야 하는 비효율을 겪습니다.
+## 문서 찾기
 
-백스테이지 코치는 교안을 최신 웹 스니펫과 대조해 **지식 갭(Gap)을 시각화**하고, 수업 직전 질의응답 대응을 위한 **프리티칭(Pre-teaching) 코칭**을 제공하는 실전형 점검 솔루션입니다.
+- 제품 범위와 결정: [제품 기준](docs/PRODUCT_BASELINE.md)
+- 데이터 불변조건과 이전 준비: [데이터 무결성 및 PostgreSQL 이전 기준](docs/DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md)
+- 작업 규칙: [AGENTS.md](AGENTS.md)
+- 최근 진행 상태: [최신 핸드오프](docs/LATEST_HANDOFF.md)
+- 전체 문서 상태: [문서 인덱스](docs/README.md)
+- 합성 로컬 PostgreSQL: [실행·백업·복원 runbook](infra/postgres/README.md)
 
-## 🎯 심사위원 테스트 가이드 (For Judges)
+시장·가격·현장 검토서는 참고 자료이며 제품 정책의 기준이 아닙니다. 과거 일일 핸드오프에는 다른 프로젝트 내용이 섞여 있으므로 현재 작업의 시작점으로 사용하지 않습니다.
 
-1. **파일 업로드:** 외부 라이브러리 코드가 포함된 `.ipynb` 또는 `.pdf` 교안을 업로드합니다.
-2. **지식 갭 탐지 확인:** 최신 웹 스니펫(Tavily) 기반으로 구식/누락 포인트가 심각도 배지와 함께 표시되는지 확인합니다.
-3. **마이그레이션 다운로드 (`.ipynb` 한정):** 제안 코드가 반영된 수정본 Export를 확인합니다.
-4. **Zero-gap 브리핑 확인:** 갭 미탐지 시에도 `defenseDrills` 중심 브리핑이 생성되는지 확인합니다.
-
-## 🚀 핵심 기능 (Core Features)
-
-- **Jupyter/PDF 맞춤형 파싱:** `nbformat`으로 `.ipynb` 코드 셀 인덱스를 보존해 파싱하고, PDF는 `_truncate_for_llm`(head-tail 절삭)으로 입력 길이를 제어합니다.
-- **웹 검색 증강 검증:** 정상 API 키 환경에서 Tavily(`search_depth="basic"`, `max_results=2`)로 최신 웹 스니펫을 수집해 교안 최신성을 검증합니다.
-- **환각 억제 전략:** `VERSION_AND_WEB_POLICY` 정책으로 웹 스니펫에 명시된 팩트 중심 인용을 유도해 버전 환각 리스크를 낮춥니다.
-- **청크 단위 단일 응답 구조:** 정상 환경 기준, 분석 청크당 LLM 1회 호출로 `gaps`와 `lecture_guide`를 동일 JSON으로 수신해 중복 호출을 줄입니다.
-
-## 🛠 시스템 아키텍처 (Architecture)
-
-- **Backend (FastAPI):** 파일 파싱, 검색 증강 분석, `/api/analyze` 전담
-- **Edge API (Next.js):** 동적 요약/브리핑 생성, `/api/summarize` 전담 (Edge Runtime)
-- **데이터 정합성:** `ReportSummarySchema`(Zod) 검증으로 응답 파손 가능성 완화
-- **저장 계층:** Supabase `reports`, `gap_items` 기반 리포트/갭 데이터 관리
-
-## 💻 로컬 실행 방법 (Getting Started)
-
-### 1) Clone
-
-```bash
-git clone https://github.com/ukhwang/instructor-sync.git
-cd instructor-sync
-```
-
-### 2) Frontend (Next.js)
+## 로컬 실행
 
 ```bash
 npm install
 npm run dev
-# http://localhost:3000
 ```
 
-### 3) Backend (FastAPI)
+로컬 환경 변수 이름은 `.env.example`을 기준으로 하고 실제 비밀값은 커밋하지 않습니다. 데모 모드는 실제 저장·권한 동작을 증명하지 않습니다.
+
+## 검사
 
 ```bash
-cd backend
-python -m venv venv
-# Windows (PowerShell)
-venv\Scripts\Activate.ps1
-# macOS/Linux
-# source venv/bin/activate
-
-pip install -r requirements.txt
-uvicorn main:app --reload
-# http://localhost:8000
+npm run verify
+npm run build
 ```
 
-### 4) Environment Variables
-
-로컬 개발 시 **프로젝트 루트**의 `.env.local`(또는 `.env`)에 아래 값을 설정합니다.  
-(프론트엔드와 백엔드 모두 루트 환경변수를 참조)
-
-- `OPENAI_API_KEY`
-- `TAVILY_API_KEY`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `(선택) NEXT_PUBLIC_BACKEND_URL` (기본값: `http://localhost:8000`)
-
-## 🤝 AI Collaboration (AI 협업 증빙)
-
-본 프로젝트는 공모전 취지에 맞춰 AI 협업 과정을 문서화했습니다.
-
-- [AI 협업 보고서](docs/AI_COLLAB_REPORT.md)
-- [AI 협업 지침서](docs/AI_COLLAB_POLICY.md)
-- [AI 프롬프트 로그](docs/AI_PROMPT_LOG.md)
+`npm run verify`는 단위/DB 테스트, TypeScript, ESLint를 실행합니다. 이 통과 결과는 운영 Supabase 적용, 실제 계정 격리, 카카오톡 인앱 브라우저 또는 모바일 오디오 검증을 대신하지 않습니다.

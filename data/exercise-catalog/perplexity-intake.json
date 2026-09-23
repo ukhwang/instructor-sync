@@ -1,0 +1,347 @@
+{
+  "exercises": [
+    {
+      "name_ko": "스쿼트 (백 스쿼트 / 바디웨이트 스쿼트)",
+      "aliases": [
+        "back squat",
+        "bodyweight squat",
+        "air squat",
+        "sit-to-stand"
+      ],
+      "search_keywords": [
+        "back squat form",
+        "bodyweight squat technique",
+        "squat depth parallel",
+        "squat knee valgus",
+        "squat trunk lean",
+        "dowel squat assessment"
+      ],
+      "start_position": "발은 대략 어깨너비, 발끝 정면 또는 약간 외향 (≤10°), 중립 척추, 가슴 펴기.",
+      "execution_sequence": "하강: 고관절·슬관절·족관절 동시 굴곡, 통제된 속도. 깊이: 대퇴가 지면과 평행 이상 (hip ≤ knee). 상승: 고관절·슬관절·족관절 신전, 상체 각도 유지.",
+      "member_focus_cues": [
+        "발 전체로 바닥 누르기",
+        "무릎이 발끝 방향 유지",
+        "가슴 펴고 등 세우기",
+        "엉덩이 뒤로 앉으면서 무릎도 같이 구부리기",
+        "내려갈 때와 올라갈 때 속도 일정하게"
+      ],
+      "instructor_observation_items": [
+        "두부 위치 (중립/과신전·과굴곡)",
+        "흉추 (가슴 내려감/말림)",
+        "트렁크 (과도 전굴/요추 만곡 소실)",
+        "고관절 수평/비대칭",
+        "정면 무릎 (valgus: 무릎이 안으로 쏠림)",
+        "경골 전진/발 전체 접촉",
+        "하강 전략 (hip-hinge 여부)",
+        "깊이 (대퇴 ≥ 평행)",
+        "상승 리듬 (어깨·고관절 동시 상승, ascent:descent ≥ 2:1)"
+      ],
+      "observation_condition": "2 회 이상 반복에서 기준 미달 시 결함 기록. 통증 시 중단.",
+      "member_subjective_checks": [
+        "무릎 안쪽/바깥쪽 중 어디에 더 힘이 가는지",
+        "발뒤꿈치 vs 발앞꿈치 체중 위치",
+        "허리·무릎·고관절 중 불편한 부위",
+        "내려갈 때 숨 참는 느낌 여부"
+      ],
+      "common_performance_differences": [
+        "무릎 valgus",
+        "과도 전경사(trunk lean)",
+        "요추 만곡 소실(rounding)",
+        "한쪽 고관절 떨어짐",
+        "발 들림",
+        "깊이 부족"
+      ],
+      "adjustment_candidates": [
+        "스탠스 너비/발끝 각도 미세 조정",
+        "의자 sit-to-stand 로 범위 제한",
+        "벽·봉(dowel) 으로 상체 패턴 교정",
+        "고관절·발목 가동역 제한 시 범위 축소"
+      ],
+      "adjustment_prerequisites": "통증 없어야 하며, 조정 후에도 중립 척추·발 전체 접촉·무릎 방향 유지가 우선.",
+      "stop_inquiry_guidance_member": "무릎·허리·고관절에 예리하거나 지속적 통증, 저림, 불안정감 시 중단. 통증 위치/강도/지속시간, 과거 손상 이력 문의.",
+      "instructor_notes": "통증 시 의료인 연계, 하중 없는 바디웨이트로 패턴 먼저 확립, 심호흡·복압 유지 교육 (Valsalva 는 고중량 시 전문 지도 필요).",
+      "variations": [
+        "고블릿 스쿼트",
+        "프론트 스쿼트",
+        "오버헤드 스쿼트",
+        "sit-to-stand(의자 사용)",
+        "와이드/내로우 스탠스 스쿼트"
+      ],
+      "sources": [
+        {
+          "claim": "스쿼트 시작/깊이/상체·하체 정렬 기준, BSA 10 개 평가 항목, “대퇴 평행 이상”, “ascent:descent ≥ 2:1” 등",
+          "title": "The back squat: A proposed assessment of functional deficits and technical factors that limit performance",
+          "institution": "Cincinnati Children's Hospital Medical Center 등 (Strength Cond J)",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4262933/",
+          "published": "2014-12-01 (온라인 2015)",
+          "supports": [
+            "시작 자세",
+            "깊이 기준",
+            "관찰 항목",
+            "tempo 비율"
+          ],
+          "population_limit": "주로 운동선수·훈련 인구 중심의 기술 분석; 모든 회원 일반화 주의"
+        },
+        {
+          "claim": "스탠스·발끝 각도, 무릎 valgus, trunk lean 등 결함 유형과 가동역·근약화 연관",
+          "title": "The back squat: A proposed assessment of functional deficits and technical factors that limit performance",
+          "institution": "Strength Cond J",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4262933/",
+          "published": "2014-12-01",
+          "supports": [
+            "수행 차이",
+            "조정 후보"
+          ],
+          "population_limit": "同上"
+        }
+      ],
+      "prescription": {
+        "reps": null,
+        "sets": null,
+        "rest_seconds": null,
+        "tempo": "controlled descent/ascent, ascent:descent ≥ 2:1",
+        "tempo_source": "Myer et al., 2014"
+      },
+      "review_status": {
+        "draft": true,
+        "reviewed_by": null,
+        "reviewed_at": null
+      }
+    },
+    {
+      "name_ko": "푸시업 (Standard / Modified)",
+      "aliases": [
+        "push-up",
+        "standard push-up",
+        "modified push-up",
+        "knee push-up",
+        "push-up test"
+      ],
+      "search_keywords": [
+        "push-up form",
+        "push-up elbow angle",
+        "push-up sagging hips",
+        "push-up chest to floor",
+        "modified push-up knees"
+      ],
+      "start_position": "엎드려 손은 어깨너비보다 약간 넓게, 손가락 펴서 바닥 고정, 어깨-손목 정렬, 몸은 머리-발끝(또는 무릎) 일직선.",
+      "execution_sequence": "하강: 팔꿈치 45–60° 정도 벌려 몸통 옆으로, 가슴이 바닥에 거의 닿을 때까지 (약 90° 굴곡). 상승: 팔꿈치 완전 신전, 몸통 일직선 유지.",
+      "member_focus_cues": [
+        "손 어깨 아래, 손가락 넓게",
+        "팔꿈치 옆으로 45° 정도",
+        "배·엉덩이 조여 몸 일직선",
+        "가슴이 바닥에 거의 닿았다가 밀어 올리기",
+        "내릴 때 숨 들이마시고, 올릴 때 내쉬기"
+      ],
+      "instructor_observation_items": [
+        "손 위치 (어깨너비보다 약간 넓고 어깨 아래)",
+        "팔꿈치 각도 (45–60°, T 자 아님)",
+        "몸통 정렬 (머리-골반-무릎/발 일직선)",
+        "고관절 sag/pike",
+        "가슴 높이 (주먹/수건/블록에 거의 닿는지)",
+        "팔꿈치 완전 신전 여부 (상위)",
+        "호흡 (숨 참지 않는지)"
+      ],
+      "observation_condition": "반복 중 1 회라도 자세 무너지면 교정 큐 1 회 허용, 수정 안 되면 테스트/세트 종료.",
+      "member_subjective_checks": [
+        "손목·어깨·팔꿈치 중 불편한 곳",
+        "가슴 vs 삼두 vs 어깨 앞쪽 중 어디에 더 힘이 가는지",
+        "허리 늘어지는 느낌 있는지",
+        "숨 참는 느낌 있는지"
+      ],
+      "common_performance_differences": [
+        "팔꿈치 과도 외전 (T 자)",
+        "고관절 sag/pike",
+        "부분 범위(가슴 안 닿음)",
+        "손목 통증으로 손 위치 불안정"
+      ],
+      "adjustment_candidates": [
+        "인클라인 푸시업(손 높이 올림)",
+        "니 푸시업(무릎 지지)",
+        "푸시업 바/덤벨로 손목 중립 유지",
+        "범위 축소(가슴이 수건/블록만 닿게)"
+      ],
+      "adjustment_prerequisites": "통증 없어야 하며, 몸통 일직선·팔꿈치 각도·가슴 깊이가 우선.",
+      "stop_inquiry_guidance_member": "어깨·팔꿈치·손목에 예리하거나 지속적 통증, 저림, 불안정감 시 중단. 통증 위치/강도/과거 손상, 손목 부담 여부 문의.",
+      "instructor_notes": "통증 시 의료인 연계, 인클라인/니 푸시업으로 부하 조절, “완전 범위 + 일직선”을 반복 수보다 우선.",
+      "variations": [
+        "인클라인 푸시업",
+        "디클라인 푸시업",
+        "니 푸시업",
+        "와이드/내로우 푸시업",
+        "pseudo planche push-up",
+        "lateral push-up"
+      ],
+      "sources": [
+        {
+          "claim": "“손 어깨너비, 팔꿈치 90°, 가슴 거의 바닥, 머리-골반-무릎 일직선” 등 푸시업 테스트 기준",
+          "title": "Development of a Standard Push-up Scale for College-Aged Females",
+          "institution": "Keene State College (Int J Exerc Sci)",
+          "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9362895/",
+          "published": "2022-06-01",
+          "supports": [
+            "시작 자세",
+            "수행 순서",
+            "관찰 항목"
+          ],
+          "population_limit": "대학 연령 여성 중심; 모든 성별·연령 일반화 주의"
+        },
+        {
+          "claim": "ACE 푸시업 평가 프로토콜(손 어깨 아래, 몸통 rigid, 가슴이 주먹/수건/폼블록 접촉, 팔꿈치 완전 신전)",
+          "title": "PUSH-UP ASSESSMENT PROTOCOL",
+          "institution": "ACE Fitness",
+          "url": "https://contentcdn.eacefitness.com/assets/certification/ace-answers/forms/pt/36_Push-up_Assessment_Protocol.pdf",
+          "published": "미상 (확인일 2026-09-22)",
+          "supports": [
+            "관찰 항목",
+            "수행 기준"
+          ],
+          "population_limit": "일반 성인 대상 코칭 프로토콜"
+        },
+        {
+          "claim": "“팔꿈치 45°, 몸 일직선, controlled tempo” 등 코칭 가이드",
+          "title": "Proper Push-Up Form and Technique: A Complete Guide",
+          "institution": "NASM",
+          "url": "https://www.nasm.org/resource-center/blog/training/proper-push-up-form-and-technique-a-complete-guide",
+          "published": "2021 (업데이트 미상)",
+          "supports": [
+            "회원용 집중 포인트",
+            "관찰 항목"
+          ],
+          "population_limit": "일반 훈련 인구"
+        }
+      ],
+      "prescription": {
+        "reps": null,
+        "sets": null,
+        "rest_seconds": null,
+        "tempo": "controlled descent/ascent, no bounce",
+        "tempo_source": "Adams et al., 2022; 일반 코칭 가이드"
+      },
+      "review_status": {
+        "draft": true,
+        "reviewed_by": null,
+        "reviewed_at": null
+      }
+    },
+    {
+      "name_ko": "플랭크 (Front Plank: Forearm / High Plank)",
+      "aliases": [
+        "front plank",
+        "forearm plank",
+        "straight-arm plank",
+        "plank hold"
+      ],
+      "search_keywords": [
+        "plank form",
+        "plank hips sag",
+        "plank neutral spine",
+        "forearm plank elbows under shoulders",
+        "plank breathing"
+      ],
+      "start_position": "포어암 플랭크: 엎드려 팔꿈치를 어깨 바로 아래, 전완 평행, 발은 고관절 너비, 머리-골반-발 일직선. 하이 플랭크: 손바닥 어깨 아래, 팔 신전, 동일 정렬.",
+      "execution_sequence": "복부·둔근·대퇴 수축으로 몸통 rigid 유지, 중립 척추. 호흡 유지하며 정적 유지.",
+      "member_focus_cues": [
+        "팔꿈치(또는 손) 어깨 바로 아래",
+        "배·엉덩이 조여 허리 늘어진 느낌 없게",
+        "머리-등-엉덩이-발 일직선",
+        "숨 참지 말고 꾸준히 숨쉬기",
+        "엉덩이 너무 높이지 않기"
+      ],
+      "instructor_observation_items": [
+        "팔꿈치/손-어깨 정렬",
+        "머리-골반-발 일직선",
+        "고관절 sag/pike",
+        "요추 중립 (과도 신전/굴곡)",
+        "경부 중립 (과도 신전/과굴곡)",
+        "어깨 shrug",
+        "호흡 (숨 참는지)"
+      ],
+      "observation_condition": "자세 무너지면 (sag/pike/경부 과신전 등) 세트 종료 또는 regress.",
+      "member_subjective_checks": [
+        "허리 늘어지는 느낌",
+        "복부 앞쪽 vs 옆구리 vs 허리 중 어디에 더 힘이 가는지",
+        "목 앞쪽/뒤쪽 당김",
+        "숨 참는 느낌"
+      ],
+      "common_performance_differences": [
+        "고관절 sag",
+        "pike",
+        "경부 과신전/과굴곡",
+        "어깨 shrug",
+        "숨 참음"
+      ],
+      "adjustment_candidates": [
+        "인클라인 플랭크(손/팔꿈치 높이)",
+        "니 플랭크(무릎 지지)",
+        "hold 시간 단축",
+        "“갈비뼈 내려·둔근 수축” 큐 강조"
+      ],
+      "adjustment_prerequisites": "허리 통증 없어야 하며, 중립 척추·일직선·호흡 유지가 우선.",
+      "stop_inquiry_guidance_member": "허리·목·어깨에 예리하거나 지속적 통증, 저림, 어지러움 시 중단. 통증 위치/강도/과거 손상, 고혈압 등 호흡 제한 이슈 문의.",
+      "instructor_notes": "통증 시 의료인 연계, 인클라인/니 플랭크로 부하 조절, “자세 깨지면 시간 늘리지 말 것”.",
+      "variations": [
+        "인클라인 플랭크",
+        "니 플랭크",
+        "사이드 플랭크",
+        "숄더 탭 플랭크",
+        "암/레그 리프트 플랭크",
+        "바디소/워크아웃 플랭크",
+        "불안정 표면 플랭크"
+      ],
+      "sources": [
+        {
+          "claim": "“팔꿈치 어깨 아래, 머리-발 일직선, 복부·둔근 수축, sag/pike 금지, 호흡 유지” 등 코칭 기준",
+          "title": "The Plank: Coaching Progressions and Variations for Every Client",
+          "institution": "NASM",
+          "url": "https://www.nasm.org/resource-center/blog/training/the-plank-coaching-progressions-and-variations-for-every-client",
+          "published": "2021 (업데이트 2026-07-25)",
+          "supports": [
+            "시작 자세",
+            "관찰 항목",
+            "회원용 집중 포인트",
+            "조정 후보"
+          ],
+          "population_limit": "일반 훈련 인구"
+        },
+        {
+          "claim": "“hips sag/pike, neutral neck, breath control” 등 오류와 수정 큐",
+          "title": "How to Do a Plank Right and Get the Most Benefits",
+          "institution": "Banner Health",
+          "url": "https://www.bannerhealth.com/healthcareblog/advise-me/how-to-do-a-plank-right-and-get-the-most-benefits",
+          "published": "2025-10-10",
+          "supports": [
+            "관찰 항목",
+            "회원용 집중 포인트"
+          ],
+          "population_limit": "일반 대중"
+        },
+        {
+          "claim": "플랭크 정렬·호흡·mistakes 설명",
+          "title": "Plank exercise",
+          "institution": "Invigor Health",
+          "url": "https://invigorhealth.com.au/exercise/plank/",
+          "published": "2025-11-26",
+          "supports": [
+            "시작 자세",
+            "관찰 항목"
+          ],
+          "population_limit": "일반 대중"
+        }
+      ],
+      "prescription": {
+        "reps": null,
+        "sets": null,
+        "rest_seconds": null,
+        "tempo": "static hold, steady breathing",
+        "tempo_source": "NASM, Banner Health",
+        "reference_values_note": "NSCA 기반 근지구력 가이드에서 “플랭크 30–60 초, 3–5 세트, 휴식 30 초”라는 참고값이 있으나, 이는 근지구력 훈련 일반론이며 플랭크 특이 prescription 은 아님."
+      },
+      "review_status": {
+        "draft": true,
+        "reviewed_by": null,
+        "reviewed_at": null
+      }
+    }
+  ]
+}

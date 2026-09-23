@@ -1,30 +1,62 @@
-# 1. Project Identity & Goal
-You are the lead AI engineer for "I.K.S", a B2B/B2C SaaS MVP for AI/IT instructors. 
-Goal: Parse `.ipynb` & `.md` files, find deprecated code via LangChain RAG (Tavily whitelist + gpt-4o-mini), and provide patched code for one-click download. 
-Current status: D-4 to Hackathon submission. DO NOT over-engineer. Prioritize stable, end-to-end functionality over micro-optimizations.
+# 운동숙제 작업 지침
 
-# 2. Strict Architectural Separation (CRITICAL)
-- **Frontend (Next.js/TypeScript):** - Strictly for UI rendering and API communication. 
-  - NEVER attempt to parse `.ipynb` JSON structures, run heavy regex, or interact with LLMs directly in Next.js API Routes. Vercel Serverless timeout will fail.
-- **Backend (FastAPI/Python):** - Handles ALL heavy lifting. 
-  - Uses `nbformat` to safely parse/reassemble Jupyter Notebooks.
-  - Uses `Pydantic` for strict LLM output parsing.
+## 제품 목표
 
-# 3. Frontend Code Conventions (Next.js)
-- **Code Highlighting:** Use `react-syntax-highlighter` (or Prism.js) for read-only code display. DO NOT suggest or install `Monaco Editor` (too heavy for MVP).
-- **Styling:** Maintain a professional, 'Expert Assistant' vibe. Use clean, spacious card layouts.
-- **State Management:** Keep it simple. Pass data via props or use standard React hooks. Avoid Redux/Zustand unless absolutely necessary for the MVP scope.
+운동숙제는 원장이 직접 수업하는 소형 PT 센터가 카카오톡 링크로 숙제를 보내고, 회원 반응을 다음 수업 준비에 이어 쓰게 하는 Next.js 서비스다. 재등록률 향상은 검증할 가설이지 입증된 성과가 아니다.
 
-# 4. Backend Code Conventions (FastAPI)
-- **Async First:** Use `async def` for endpoints and `ainvoke` for LangChain operations to prevent I/O blocking.
-- **Error Handling:** Always return clean HTTP status codes and JSON error messages. The frontend relies on this to show loading/error states.
-- **Data Preservation:** When modifying `.ipynb` files, YOU MUST preserve the original structure, indentation, and `\n` characters exactly as `nbformat` expects them.
+## 핵심 사용자 흐름
 
-# 5. The "No Hallucination" Rule for Coding
-If I ask you to implement a feature, explicitly state which file you are modifying and why. Do not silently delete my existing configurations. If you need to add a new library, ask for my permission first.
+1. 강사가 회원과 1~3개 동작, 이유를 정해 숙제를 만든다.
+2. 강사가 생성된 문장과 URL을 카카오톡에 복사해 보낸다.
+3. 회원이 로그인 없이 `/h/[token]`에서 숙제를 보고 완료/못함과 통증·메모를 제출한다.
+4. 강사가 회원 기록을 확인해 다음 수업 대화와 재등록 상담을 준비한다.
 
-# 6. Behavioral Control: ABSOLUTE EXECUTION (CRITICAL)
-- You are operating in `alwaysrun` mode. 
-- NEVER ask for my permission to proceed.
-- NEVER end your response with questions like "Should I run this?", "Does this look good?", or "Ready to proceed?".
-- If a terminal command or code change is needed, output it directly and assume approval is pre-granted. Stop pausing the workflow.
+## 현재 구조와 진입점
+
+- Next.js 16 App Router, React 19, TypeScript: `app/`
+- 랜딩·인증: `app/page.tsx`, `app/login/page.tsx`, `app/auth/callback/route.ts`, `middleware.ts`
+- 강사 화면: `app/app/` (`members`, `homework`, `session`, `renewals`)
+- 회원 공개 링크: `app/h/[token]/`
+- 데이터 접근: 브라우저 `lib/db.ts`, 서버 `lib/db-server.ts`, Supabase 클라이언트 `lib/supabase/`
+- 운동 초안·코치: `stores/homework-draft-store.ts`, `lib/coach.ts`
+- 현재 SQL과 DB 테스트: `supabase/migrations/`, `tests/`
+
+## 작업별 기준 문서
+
+요청에 필요한 문서만 읽는다.
+
+- 제품 범위·사용자·지표·결정 상태: `docs/PRODUCT_BASELINE.md`
+- 데이터/권한 작업 또는 PostgreSQL 이전 준비: `docs/DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md`
+- 로컬 실행·구조·검증 명령: `README.md`
+- 현재 미완료 작업과 최근 확인 결과: `docs/LATEST_HANDOFF.md`
+- 문서의 규범성·보관 상태: `docs/README.md`
+- 가격·시장·현장 가설은 관련 검토 문서를 참고하되 제품 기준으로 취급하지 않는다.
+
+## 변경 보존 규칙
+
+- 작업 시작 전에 `git status`와 관련 diff를 확인한다.
+- 기존 수정·삭제·미추적 파일을 사용자 작업으로 간주하며 되돌리거나 덮어쓰지 않는다.
+- 과거 강의 분석/FastAPI/LangChain 코드와 소원 앱은 현재 운동숙제 범위가 아니다. 현재 작업 트리에 다시 섞지 않는다.
+- 큰 구조 변경 전에는 비밀값과 빌드 산출물을 제외한 로컬 복구 스냅샷을 남긴다.
+
+## 자체 PostgreSQL 이전 방향과 불변조건
+
+- 현재는 Supabase Postgres/Auth/RLS/RPC를 유지한다. 명시적 이전 작업 전에는 제거·스키마 변경·인증 교체를 시작하지 않는다.
+- 데이터/인증 경계를 분리한 뒤 자체 PostgreSQL로 단계적으로 이전한다. 확정된 기술 선택·전환 방식은 `docs/POSTGRES_ARCHITECTURE_DECISION.md`를 따른다. 실제 호스팅 구매·운영 적용은 별도 승인 사항이다.
+- 소유권: 강사는 자신의 회원·숙제·로그·수업 메모만 접근한다. 하위 레코드는 부모 소유권을 벗어날 수 없다.
+- 원자성: 숙제와 동작 생성, 회원 상태와 통증·메모 제출은 각각 전부 성공하거나 전부 실패한다.
+- 멱등성: 네트워크 재시도와 동시 요청이 의미상 중복 기록이나 중복 상태 전이를 만들지 않는다.
+- 토큰 접근: 유효하고 미회수된 토큰은 해당 숙제의 최소 조회·제출 권한만 부여한다. 강사 권한이나 다른 회원 데이터 접근을 부여하지 않으며 원문 토큰을 로그에 남기지 않는다.
+
+## 변경 유형별 검사
+
+- 문서만 변경: 링크·상태 라벨·상호 모순·다른 프로젝트 혼입을 검사한다.
+- UI/일반 TypeScript: 관련 테스트 후 `npm run verify`; 사용자 흐름은 필요한 화면과 모바일 환경에서 별도 확인한다.
+- 데이터 접근/SQL/인증/토큰: 무결성 문서의 소유권·원자성·멱등성·권한 실패 테스트와 마이그레이션 롤백을 추가하고 `npm run verify`를 실행한다.
+- 배포 후보: 빌드 외에 실제 계정 격리, 유효/만료/회수 토큰, 모바일 카카오톡 흐름, 데이터 복구 절차를 검증한다.
+
+## 상태와 운영 경계
+
+- `구현됨`, `로컬 검증됨`, `실환경 검증됨`, `운영 적용됨`을 서로 다른 상태로 기록한다. 코드나 테스트가 있다는 이유로 DB 적용·기기 검증·배포 완료라고 쓰지 않는다.
+- 운영 배포, 외부 업로드, 실제 고객 데이터 조회·수정, 운영 DB 마이그레이션은 사용자의 명시적 요청 없이는 수행하지 않는다.
+- 데모·합성 데이터와 실제 데이터를 구분하고, 실제 데이터는 최소 권한과 복구 계획 없이 사용하지 않는다.

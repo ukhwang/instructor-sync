@@ -1,0 +1,19 @@
+{
+  "name": "homework-local-postgres-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "migrate": "node database.mjs migrate",
+    "seed": "node seed.mjs",
+    "check:ownership": "node --test ownership.test.mjs",
+    "check:ownership-homeworks": "node --test ownership-homeworks.test.mjs",
+    "check:schema": "node --test schema-integrity.test.mjs",
+    "fingerprint": "node fingerprint.mjs show"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.2",
+    "drizzle-kit": "0.31.10",
+    "pg": "8.23.0"
+  }
+}

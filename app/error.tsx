@@ -31,7 +31,7 @@ export default function ErrorPage({
           이전 페이지
         </Button>
         <Button onClick={() => reset()} className="bg-blue-600 hover:bg-blue-700">
-          실행 취소 후 재시도
+          다시 시도
         </Button>
       </div>
     </div>

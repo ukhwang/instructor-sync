@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" role="img" aria-labelledby="title desc">
+  <title id="title">글루트 브릿지 자세 안내</title>
+  <desc id="desc">바닥에 누워 무릎을 세운 시작 자세와 엉덩이를 들어 올린 자세</desc>
+  <rect width="800" height="450" fill="#f5f5f4"/>
+  <path d="M80 350h640" stroke="#111" stroke-width="8"/>
+  <g fill="none" stroke="#111" stroke-linecap="round" stroke-linejoin="round" stroke-width="16">
+    <circle cx="170" cy="292" r="31" fill="#facc15"/>
+    <path d="M205 306l130 13 80-80 92 31M335 319l72 31h86"/>
+  </g>
+  <path d="M455 190v-68m0 0-25 29m25-29 25 29" fill="none" stroke="#111" stroke-linecap="round" stroke-linejoin="round" stroke-width="10"/>
+  <text x="400" y="70" text-anchor="middle" font-family="sans-serif" font-size="30" font-weight="700">엉덩이를 천천히 들어 올리세요</text>
+</svg>

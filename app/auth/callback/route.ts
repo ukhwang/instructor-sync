@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 function safeNextPath(raw: string | null): string {
-  const fallback = "/dashboard";
+  const fallback = "/app";
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return fallback;
   return raw;
 }
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   const nextPath = safeNextPath(requestUrl.searchParams.get("next"));
   const origin = publicOrigin(request, requestUrl);
 
-  let authResponse = NextResponse.next({
+  const authResponse = NextResponse.next({
     request: {
       headers: request.headers,
     },

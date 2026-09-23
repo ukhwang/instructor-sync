@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:17@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675
+    environment:
+      POSTGRES_USER: homework_owner
+      POSTGRES_DB: ${HW_PG_DATABASE:?Use homework_dev, homework_test, or homework_restore}
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    ports:
+      - "127.0.0.1:${HW_PG_PORT:?Use 55432, 55433, or 55434}:5432"
+    secrets:
+      - pg_password
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U homework_owner -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    labels:
+      com.homework.scope: synthetic-local-only
+secrets:
+  pg_password:
+    file: ./.local/pg-password.txt
+volumes:
+  pg_data:
+    labels:
+      com.homework.scope: synthetic-local-only

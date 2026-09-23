@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local agent watch log
+.agy-watch.log
+
+# project-only PostgreSQL/auth secrets
+/infra/postgres/.local/
+
+# Rebuildable local exercise content review database
+/data/exercise-catalog/.local/
+
+.vercel
