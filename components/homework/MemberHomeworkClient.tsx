@@ -8,6 +8,7 @@ import { z } from "zod";
 import { vibrate } from "@/lib/kakao-share";
 import { FEEDBACK_MOODS, PAIN_AREAS, type FeedbackMood, type Homework, type HomeworkItem, type Member, type PainArea } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { getExerciseMedia } from "@/lib/exercise-media";
 
 /* ────────────────────────────────────────────────────────────
  * 1. Zod Schemas
@@ -742,25 +743,53 @@ function ExerciseCard({
 
 function ExerciseMedia({ item }: { item: HomeworkItem }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  // item.mediaUrl이 없더라도 클라이언트에서 운동명 기반 GitHub 오픈소스 미디어 자동 폴백
+  const fallbackMedia = item.mediaUrl ? null : getExerciseMedia(item.exerciseName);
+  const mediaUrl = item.mediaUrl || fallbackMedia?.video || fallbackMedia?.animatedFallback || fallbackMedia?.poster;
+  const isVideo = Boolean(
+    !loadError &&
+      mediaUrl &&
+      (item.mediaType === "video" || mediaUrl.endsWith(".mp4") || mediaUrl.endsWith(".webm"))
+  );
+  const isImageOrGif = Boolean(
+    !loadError &&
+      mediaUrl &&
+      !isVideo &&
+      (item.mediaType === "image" ||
+        item.mediaType === "gif" ||
+        mediaUrl.endsWith(".gif") ||
+        mediaUrl.endsWith(".jpg") ||
+        mediaUrl.endsWith(".png") ||
+        mediaUrl.endsWith(".svg") ||
+        mediaUrl.includes("github") ||
+        mediaUrl.includes("jsdelivr"))
+  );
+  const posterUrl = item.posterUrl || fallbackMedia?.poster;
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [item.id, mediaUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !isVideo) return;
     video.muted = true;
     const playPromise = video.play();
     playPromise.catch(() => {
-      // 자동재생 차단(저전력 모드 등) 시 poster 노출로 대체
+      // 저전력 모드 등 자동재생 차단 시 안전하게 유지
     });
-  }, [item.id]);
+  }, [item.id, isVideo]);
 
   return (
-    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl bg-slate-100">
-      {item.mediaUrl && item.mediaType === "video" ? (
+    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl bg-slate-900/60 border border-slate-800 shadow-inner flex items-center justify-center">
+      {isVideo ? (
         <video
           key={item.id}
           ref={videoRef}
-          src={item.mediaUrl}
-          poster={item.posterUrl ?? undefined}
+          src={mediaUrl}
+          poster={posterUrl ?? undefined}
           autoPlay
           muted
           loop
@@ -769,13 +798,30 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
           disablePictureInPicture
           className="h-full w-full object-cover"
           aria-label={`${item.exerciseName} 동작 영상`}
+          onError={() => setLoadError(true)}
         />
-      ) : item.mediaUrl && item.mediaType === "image" ? (
+      ) : isImageOrGif ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.mediaUrl} alt={`${item.exerciseName} 동작`} className="h-full w-full object-cover" />
+        <img
+          key={item.id}
+          src={mediaUrl}
+          alt={`${item.exerciseName} 동작 가이드`}
+          className="h-full w-full object-cover"
+          loading="eager"
+          onError={() => setLoadError(true)}
+        />
       ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <Dumbbell className="size-16 text-slate-300" />
+        <div className="flex flex-col items-center justify-center gap-2 p-6 text-center text-slate-400">
+          <Dumbbell className="size-16 text-emerald-400/70 stroke-[1.5]" />
+          <p className="text-xs font-medium text-slate-400">정확한 호흡과 코어 정렬에 집중해 주세요</p>
+        </div>
+      )}
+
+      {/* GitHub 오픈소스 운동 가이드 실시간 배지 */}
+      {mediaUrl && !loadError && (
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-950/70 backdrop-blur-md border border-white/10 text-[11px] font-medium text-slate-300">
+          <span className="inline-block size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span>동작 가이드</span>
         </div>
       )}
     </div>

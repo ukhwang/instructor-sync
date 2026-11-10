@@ -3,6 +3,11 @@ import { openHomeworkRpc } from "@/lib/db-server";
 import { MemberHomeworkContainer } from "./MemberHomeworkContainer";
 import type { Homework, HomeworkItem } from "@/lib/types";
 import { COPY } from "@/lib/copy";
+import {
+  getHomeworkExerciseMedia,
+  getExerciseMedia,
+  getHomeworkExerciseDescription,
+} from "@/lib/exercise-media";
 
 export const metadata: Metadata = {
   title: "운동숙제 — 회원 기록",
@@ -52,20 +57,29 @@ export default async function MemberHomeworkPage({
     );
   }
 
-  const items: HomeworkItem[] = (result.items || []).map((it, idx) => ({
-    id: it.id || `item-${idx + 1}`,
-    homeworkId: result.homework!.id,
-    order: it.order_index ?? idx + 1,
-    exerciseName: it.name,
-    sets: it.target_sets ?? 3,
-    reps: parseInt(it.target_reps || "10", 10) || 10,
-    durationSec: null,
-    restSec: it.rest_seconds ?? 30,
-    cue: it.cue || "정확한 자세와 호흡에 집중하세요",
-    mediaUrl: it.media_url || null,
-    mediaType: (it.media_type as "video" | "gif" | "image" | null) || null,
-    posterUrl: null,
-  }));
+  const items: HomeworkItem[] = (result.items || []).map((it, idx) => {
+    const media = getHomeworkExerciseMedia(it) || getExerciseMedia(it.name);
+    const mediaUrl = it.media_url || media?.video || media?.animatedFallback || media?.poster || null;
+    const mediaType: "video" | "gif" | "image" | null =
+      (it.media_type as "video" | "gif" | "image" | null) ||
+      (media?.video ? "video" : (media?.animatedFallback ? "gif" : (media?.poster ? "image" : null)));
+    const posterUrl = media?.poster || null;
+
+    return {
+      id: it.id || `item-${idx + 1}`,
+      homeworkId: result.homework!.id,
+      order: it.order_index ?? idx + 1,
+      exerciseName: it.name,
+      sets: it.target_sets ?? 3,
+      reps: parseInt(it.target_reps || "10", 10) || 10,
+      durationSec: null,
+      restSec: it.rest_seconds ?? 30,
+      cue: it.cue || getHomeworkExerciseDescription(it) || "정확한 자세와 호흡에 집중하세요",
+      mediaUrl,
+      mediaType,
+      posterUrl,
+    };
+  });
 
   const homeworkData: Homework = {
     id: result.homework!.id,

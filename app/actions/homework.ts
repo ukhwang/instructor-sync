@@ -19,6 +19,7 @@ import {
 } from "@/components/homework/MemberHomeworkClient";
 import type { Homework, HomeworkItem, ISODateString, Member } from "@/lib/types";
 import { createHomework, getMemberById, updateMember, submitHomeworkFeedbackRpc } from "@/lib/db-server";
+import { getExerciseMedia } from "@/lib/exercise-media";
 
 /* ────────────────────────────────────────────────────────────
  * 1. AI Why 생성 (초경량 < 5ms 응답)
@@ -75,14 +76,19 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
   const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7); // 7일 후 만료
 
   const presetCatalog = parsed.presetId !== "repeat-last" ? PRESET_ITEMS[parsed.presetId] : PRESET_ITEMS["spine-pelvis-5"];
-  const dbItems = presetCatalog.map((item, idx) => ({
-    name: item.name,
-    cue: item.cue,
-    target_sets: item.sets,
-    target_reps: item.reps,
-    rest_seconds: item.restSec,
-    order_index: idx + 1,
-  }));
+  const dbItems = presetCatalog.map((item, idx) => {
+    const media = getExerciseMedia(item.name);
+    return {
+      name: item.name,
+      cue: item.cue,
+      target_sets: item.sets,
+      target_reps: item.reps,
+      rest_seconds: item.restSec,
+      order_index: idx + 1,
+      media_url: media?.video || media?.animatedFallback || media?.poster || null,
+      media_type: media?.video ? "video" : (media?.animatedFallback ? "gif" : (media?.poster ? "image" : null)),
+    };
+  });
 
   const createdDb = await createHomework({
     member_id: member.id,
@@ -93,20 +99,23 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
 
   const homeworkToken = createdDb.token || token;
 
-  const resultItems: HomeworkItem[] = dbItems.map((item, idx) => ({
-    id: `item-${idx + 1}-${Date.now()}`,
-    homeworkId: createdDb.id,
-    order: idx + 1,
-    exerciseName: item.name,
-    sets: item.target_sets,
-    reps: parseInt(item.target_reps, 10) || 10,
-    durationSec: null,
-    restSec: item.rest_seconds,
-    cue: item.cue,
-    mediaUrl: null,
-    mediaType: null,
-    posterUrl: null,
-  }));
+  const resultItems: HomeworkItem[] = dbItems.map((item, idx) => {
+    const media = getExerciseMedia(item.name);
+    return {
+      id: `item-${idx + 1}-${Date.now()}`,
+      homeworkId: createdDb.id,
+      order: idx + 1,
+      exerciseName: item.name,
+      sets: item.target_sets,
+      reps: parseInt(item.target_reps, 10) || 10,
+      durationSec: null,
+      restSec: item.rest_seconds,
+      cue: item.cue,
+      mediaUrl: item.media_url || media?.video || media?.animatedFallback || media?.poster || null,
+      mediaType: (item.media_type as any) || (media?.video ? "video" : (media?.animatedFallback ? "gif" : (media?.poster ? "image" : null))),
+      posterUrl: media?.poster || null,
+    };
+  });
 
   const result: Homework = {
     id: createdDb.id,
