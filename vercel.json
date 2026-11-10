@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["syd1"],
-  "installCommand": "npm install"
+  "installCommand": "npm install --legacy-peer-deps"
 }
