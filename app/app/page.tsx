@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getMembers, getAllHomeworks } from "@/lib/db-server";
 import { getSeoulDateTimeString } from "@/lib/token";
 import { buildCareQueue, CARE_QUEUE_LABELS } from "@/lib/care-queue";
+import { QuickAssignTrigger } from "@/components/homework/QuickAssignTrigger";
 
 export const dynamic = "force-dynamic";
 
@@ -44,12 +45,13 @@ export default async function TrainerDashboardPage() {
             수업 전 회원의 기록을 확인하고, 자연스럽게 대화를 시작하세요.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <QuickAssignTrigger members={members} />
           <Link
             href="/app/homework/new"
             className="brutalist-btn-yellow text-sm font-black"
           >
-            + 오늘의 운동숙제 작성
+            + 정밀 숙제 작성
           </Link>
           <Link
             href="/app/members"
