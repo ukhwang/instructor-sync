@@ -212,6 +212,13 @@ export default function MemberDetailPage({
 
         <div className="flex flex-wrap items-center gap-2">
           <Link
+            href={`/report/rep-${member.id}-10`}
+            target="_blank"
+            className="min-h-11 rounded-xl text-xs font-bold px-3 py-2.5 bg-indigo-600 text-white flex items-center gap-1.5 hover:bg-indigo-700 transition-colors"
+          >
+            📊 10회차 리포트 보기
+          </Link>
+          <Link
             href={`/app/session/${member.id}`}
             className="brutalist-btn-primary min-h-11 rounded-xl text-xs font-bold"
           >

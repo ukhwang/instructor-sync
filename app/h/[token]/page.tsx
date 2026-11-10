@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { openHomeworkRpc } from "@/lib/db-server";
-import { MemberHomeworkClient } from "./MemberHomeworkClient";
+import { MemberHomeworkContainer } from "./MemberHomeworkContainer";
+import type { Homework, HomeworkItem } from "@/lib/types";
 import { COPY } from "@/lib/copy";
 
 export const metadata: Metadata = {
@@ -51,36 +52,55 @@ export default async function MemberHomeworkPage({
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#f7f7f5] text-[#111111] flex flex-col justify-between py-6 px-4">
-      <div className="max-w-xl w-full mx-auto space-y-6">
-        {/* Top Header */}
-        <header className="flex items-center justify-between pb-3 border-b-2 border-black">
-          <div className="flex items-center gap-2">
-            <span className="bg-black text-white text-sm font-black px-2 py-0.5 font-mono">
-              {COPY.BRAND_NAME}
-            </span>
-            <span className="font-bold text-sm">
-              {result.member?.name || "회원"}{COPY.MEMBER.TITLE_SUFFIX}
-            </span>
-          </div>
-          <span className="text-[11px] font-mono text-neutral-500 font-bold">
-            로그인 불필요
-          </span>
-        </header>
+  const items: HomeworkItem[] = (result.items || []).map((it, idx) => ({
+    id: it.id || `item-${idx + 1}`,
+    homeworkId: result.homework!.id,
+    order: it.order_index ?? idx + 1,
+    exerciseName: it.name,
+    sets: it.target_sets ?? 3,
+    reps: parseInt(it.target_reps || "10", 10) || 10,
+    durationSec: null,
+    restSec: it.rest_seconds ?? 30,
+    cue: it.cue || "정확한 자세와 호흡에 집중하세요",
+    mediaUrl: it.media_url || null,
+    mediaType: (it.media_type as "video" | "gif" | "image" | null) || null,
+    posterUrl: null,
+  }));
 
-        {/* Client Interactive Component */}
-        <MemberHomeworkClient
-          token={token}
-          homework={result.homework!}
-          member={result.member!}
-          items={result.items || []}
-          initialLogs={result.logs || []}
+  const homeworkData: Homework = {
+    id: result.homework!.id,
+    memberId: result.member?.id || "demo-member",
+    title: `${result.member?.name || "회원"} 님의 맞춤 운동숙제`,
+    why: result.homework!.why || "오늘 수업의 효과를 극대화하기 위한 숙제입니다.",
+    token: result.homework!.token || token,
+    status: (result.homework!.status as any) || "assigned",
+    items,
+    assignedAt: result.homework!.created_at,
+    dueAt: result.homework!.token_expires_at,
+    member: {
+      id: result.member?.id || "demo-member",
+      name: result.member?.name || "회원",
+      phoneLast4: "0000",
+      ptSessionCount: 1,
+      nextSessionAt: null,
+      avatarUrl: null,
+    },
+  };
+
+  return (
+    <div className="min-h-screen bg-[#0F172A] text-white flex flex-col justify-between py-6 px-4">
+      <div className="max-w-xl w-full mx-auto space-y-6">
+        <MemberHomeworkContainer
+          homework={homeworkData}
+          member={{
+            id: result.member?.id || "demo-member",
+            name: result.member?.name || "회원",
+          }}
         />
       </div>
 
       <footer className="max-w-xl w-full mx-auto pt-8 text-center">
-        <p className="text-xs font-mono text-neutral-500">
+        <p className="text-xs font-mono text-slate-400">
           운동숙제 — 기록은 수업으로 이어집니다
         </p>
       </footer>
