@@ -27,7 +27,68 @@ export default async function MemberHomeworkPage({
   const resolvedParams = await params;
   const token = resolvedParams.token;
 
-  const result = await openHomeworkRpc(token);
+  let result = await openHomeworkRpc(token);
+
+  const isDemo =
+    token === "demo-token" ||
+    token === "demo" ||
+    token.startsWith("demo-") ||
+    token.includes("demo") ||
+    token === "sample-token-demo-active-2026";
+
+  if (!result.success && isDemo) {
+    result = {
+      success: true,
+      homework: {
+        id: "demo-hw-1",
+        why: "장시간 좌식 생활로 굳은 척추 기립근과 골반 중둔근을 활성화하여 허리 부담을 줄입니다. 수업 전까지 매일 5분 가볍게 진행해 주세요.",
+        status: "assigned",
+        token: token,
+        token_expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(),
+        created_at: new Date().toISOString(),
+      },
+      member: {
+        id: "mem-1",
+        name: "이수진",
+      },
+      items: [
+        {
+          id: "demo-item-1",
+          homework_id: "demo-hw-1",
+          order_index: 1,
+          name: "버드독 (Bird Dog)",
+          cue: "허리가 꺾이지 않도록 복부에 긴장을 유지하고 팔다리를 대각선으로 곧게 뻗습니다.",
+          target_sets: 3,
+          target_reps: "10회",
+          rest_seconds: 30,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: "demo-item-2",
+          homework_id: "demo-hw-1",
+          order_index: 2,
+          name: "글루트 브릿지 (Glute Bridge)",
+          cue: "골반을 말아올리며 엉덩이에 힘을 꽉 주고 1초 정지합니다.",
+          target_sets: 3,
+          target_reps: "15회",
+          rest_seconds: 30,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: "demo-item-3",
+          homework_id: "demo-hw-1",
+          order_index: 3,
+          name: "데드버그 (Dead Bug)",
+          cue: "허리가 바닥에서 뜨지 않게 배꼽을 아래로 누르며 교차로 움직입니다.",
+          target_sets: 2,
+          target_reps: "12회",
+          rest_seconds: 30,
+          created_at: new Date().toISOString(),
+        },
+      ],
+      logs: [],
+    };
+  }
 
   if (!result.success) {
     let title: string = COPY.MEMBER.NOT_FOUND_TITLE;

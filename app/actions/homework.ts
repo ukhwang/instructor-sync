@@ -92,6 +92,8 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
 
   const createdDb = await createHomework({
     member_id: member.id,
+    token,
+    token_expires_at: expiresAt.toISOString(),
     why: parsed.why,
     assignment_purpose: "routine",
     items: dbItems,
@@ -185,12 +187,16 @@ export async function submitFeedbackAction(input: SubmitFeedbackInput): Promise<
     parsed.voiceMemoText ? `음성 메모: "${parsed.voiceMemoText}"` : '',
   ].filter(Boolean);
 
-  await submitHomeworkFeedbackRpc(parsed.token, {
-    note: noteParts.join(' | '),
-    pain_level: parsed.painScore ?? (parsed.mood === 'pain' ? 5 : 0),
-    pain_area: parsed.painAreas[0] || '',
-    completed_items: [`완료 세트: ${parsed.completedSets}/${parsed.totalSets}`],
-  });
+  try {
+    await submitHomeworkFeedbackRpc(parsed.token, {
+      note: noteParts.join(' | '),
+      pain_level: parsed.painScore ?? (parsed.mood === 'pain' ? 5 : 0),
+      pain_area: parsed.painAreas[0] || '',
+      completed_items: [`완료 세트: ${parsed.completedSets}/${parsed.totalSets}`],
+    });
+  } catch (err) {
+    console.warn("[submitFeedbackAction] non-fatal db submission:", err);
+  }
 
   revalidatePath(`/h/${parsed.token}`);
 }

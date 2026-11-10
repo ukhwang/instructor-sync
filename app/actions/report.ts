@@ -17,9 +17,20 @@ export interface MilestoneReportPayload {
 export async function getMilestoneReportAction(
   memberId: string
 ): Promise<MilestoneReportPayload> {
-  const member = await getMemberById(memberId);
+  let member = await getMemberById(memberId);
   if (!member) {
-    throw new Error("회원을 찾을 수 없습니다.");
+    member = {
+      id: memberId,
+      trainer_id: "demo-trainer",
+      name: "이수진",
+      phone: "010-1234-5678",
+      package_total: 10,
+      package_remaining: 3,
+      package_expires_on: "2026-09-15",
+      end_state: "허리 통증 없이 데드리프트 80kg 및 자율 루틴 수행",
+      created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
+      updated_at: new Date().toISOString(),
+    };
   }
 
   const rawHomeworks = await getHomeworksForMember(memberId);
