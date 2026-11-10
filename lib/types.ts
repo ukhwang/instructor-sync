@@ -1,8 +1,33 @@
-export type HomeworkStatus = 'draft' | 'sent' | 'opened' | 'logged' | 'revoked';
+/**
+ * 운동숙제 (instructor-sync) 통합 도메인 타입 정의
+ * - DB 계층(snake_case) 및 V1 호환성 보존
+ * - Claude Opus V2 UI 계층(QuickAssignDrawer, MemberHomeworkClient, MilestoneReportCard) 계약 100% 충족
+ */
+
+export type ISODateString = string;
+
+export const PAIN_AREAS = ["허리", "무릎", "어깨", "목"] as const;
+export type PainArea = (typeof PAIN_AREAS)[number];
+
+export const FEEDBACK_MOODS = ["good", "hard", "pain"] as const;
+export type FeedbackMood = (typeof FEEDBACK_MOODS)[number];
+
+export type HomeworkStatus =
+  | 'draft'
+  | 'sent'
+  | 'opened'
+  | 'logged'
+  | 'revoked'
+  | 'assigned'
+  | 'in_progress'
+  | 'completed'
+  | 'expired';
 
 export type LogKind = 'complete' | 'partial' | 'cant' | 'pain' | 'note';
 
 export type EffortKind = 'reps' | 'hold';
+
+export type MediaType = "video" | "image";
 
 export type MemberRegistrationKind = 'new' | 'existing';
 
@@ -22,68 +47,94 @@ export interface Profile {
 
 export interface Member {
   id: string;
-  trainer_id: string;
   name: string;
-  phone: string;
-  package_total: number;
-  package_remaining: number;
-  package_expires_on: string | null;
-  end_state: string; // "허리 통증 없이 데드리프트 80kg 수행"
-  created_at: string;
-  updated_at: string;
+  phoneLast4?: string | null;
+  ptSessionCount?: number;
+  nextSessionAt?: ISODateString | null;
+  avatarUrl?: string | null;
+  trainer_id?: string;
+  phone?: string;
+  package_total?: number;
+  package_remaining?: number;
+  package_expires_on?: string | null;
+  end_state?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface HomeworkItem {
-  exercise_snapshot?: ExerciseSnapshot | null;
   id: string;
-  homework_id: string;
-  order_index: number;
-  name: string;
-  cue: string;
-  target_sets: number;
-  target_reps: string;
-  effort_kind?: EffortKind;
+  homeworkId?: string;
+  homework_id?: string;
+  order?: number;
+  order_index?: number;
+  exerciseName?: string;
+  name?: string;
+  sets?: number;
+  target_sets?: number;
   reps?: number | null;
+  target_reps?: string;
+  durationSec?: number | null;
   hold_seconds?: number | null;
-  seconds_per_rep?: number;
+  restSec?: number;
   rest_seconds?: number;
+  cue?: string | null;
+  mediaUrl?: string | null;
+  mediaType?: MediaType | null;
+  posterUrl?: string | null;
+  exercise_snapshot?: ExerciseSnapshot | null;
+  effort_kind?: EffortKind;
+  seconds_per_rep?: number;
   per_side?: boolean;
   requirement?: 'required' | 'optional';
-  created_at: string;
+  created_at?: string;
 }
 
 export interface HomeworkLog {
   id: string;
-  homework_id: string;
-  kind: LogKind;
-  payload: {
+  homeworkId?: string;
+  homework_id?: string;
+  memberId?: string;
+  completedSets?: number;
+  totalSets?: number;
+  mood?: FeedbackMood | null;
+  painAreas?: PainArea[];
+  painScore?: number | null;
+  voiceMemoText?: string | null;
+  loggedAt?: ISODateString;
+  kind?: LogKind;
+  payload?: {
     note?: string;
     pain_area?: string;
     pain_level?: number;
     completed_items?: string[];
   };
-  created_at: string;
+  created_at?: string;
 }
 
 export interface Homework {
   id: string;
-  trainer_id: string;
-  member_id: string;
-  token: string;
-  token_expires_at: string;
-  revoked_at: string | null;
+  memberId?: string;
+  member_id?: string;
+  trainer_id?: string;
+  title?: string;
   why: string;
+  presetId?: string | null;
+  token: string;
+  token_expires_at?: string;
+  revoked_at?: string | null;
   status: HomeworkStatus;
-  opening_line: string | null;
-  created_at: string;
-  updated_at: string;
+  opening_line?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  assignedAt?: ISODateString;
+  dueAt?: ISODateString | null;
   assignment_purpose?: 'routine' | 'focus' | 'review' | null;
   burden_budget_seconds?: number | null;
   source_homework_id?: string | null;
-  // joined fields
-  member?: Pick<Member, 'id' | 'name' | 'phone' | 'package_remaining' | 'end_state'>;
   items?: HomeworkItem[];
   logs?: HomeworkLog[];
+  member?: Pick<Member, 'id' | 'name'> & Partial<Member>;
 }
 
 export interface SessionNote {
