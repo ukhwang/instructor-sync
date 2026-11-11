@@ -407,7 +407,7 @@ const MOOD_OPTIONS: ReadonlyArray<{ value: FeedbackMood; emoji: string; label: s
 
 const PAIN_SCORES: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-export default function MemberHomeworkClient({
+export function MemberHomeworkClient({
   homework,
   member,
   onLogSet,
@@ -987,3 +987,5 @@ function VoiceMemo({ voice }: { voice: ReturnType<typeof useVoiceMemo> }) {
     </div>
   );
 }
+
+export default MemberHomeworkClient;
