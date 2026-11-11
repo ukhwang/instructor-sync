@@ -1,8 +1,22 @@
 'use client';
 
-import { motion, useReducedMotion } from 'motion/react';
+import { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import type { Briefing, RiskLevel } from '@/lib/briefing/types';
 import { useBriefingCard } from './useBriefingCard';
+
+function useReducedMotion(): boolean {
+  const [shouldReduce, setShouldReduce] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setShouldReduce(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setShouldReduce(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return shouldReduce;
+}
 
 interface SessionBriefingCardProps {
   briefing: Briefing;
