@@ -5,6 +5,8 @@ import { AnimatePresence, motion, useDragControls, type PanInfo } from "motion/r
 import {
   CalendarPlus,
   Check,
+  Copy,
+  ExternalLink,
   Loader2,
   MessageCircle,
   Minus,
@@ -16,15 +18,12 @@ import {
 import { useCallback, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { z } from "zod";
 
-import { shareToKakao, vibrate, type ShareResult } from "@/lib/kakao-share";
+import { shareToKakao, vibrate, copyToClipboard, toAbsoluteUrl, type ShareResult } from "@/lib/kakao-share";
 import type { Homework, ISODateString, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   REHAB_EXERCISES,
   searchRehabExercises,
-  COACHING_TAGS,
-  type CoachingTag,
-  type PainArea,
   type RehabExerciseItem,
 } from "@/lib/exercises/rehab-db";
 
@@ -45,6 +44,7 @@ export const customExerciseItemSchema = z.object({
   sets: z.number().int().min(1),
   reps: z.string().min(1),
   cue: z.string(),
+  coachingTags: z.array(z.string()).optional(),
   restSec: z.number().int().optional(),
   gifUrl: z.string().optional(),
   posterUrl: z.string().optional(),
@@ -76,7 +76,7 @@ export const scheduleNextSessionInputSchema = z.object({
 export type ScheduleNextSessionInput = z.infer<typeof scheduleNextSessionInputSchema>;
 
 /* ────────────────────────────────────────────────────────────
- * 2. Props
+ * 2. Props & Types
  * ──────────────────────────────────────────────────────────── */
 
 export interface SuggestedNextSession {
@@ -97,9 +97,27 @@ export interface QuickAssignDrawerProps {
   onAssigned?: (homework: Homework) => void;
 }
 
-/* ────────────────────────────────────────────────────────────
- * 3. Logic Hook
- * ──────────────────────────────────────────────────────────── */
+export interface SelectedCardItem {
+  id: string;
+  name: string;
+  koreanOnlyName: string;
+  sets: number;
+  reps: string;
+  cue: string;
+  restSec: number;
+  gifUrl: string;
+  posterUrl: string;
+  availableCoachingTags: string[];
+  selectedCoachingTags: string[];
+}
+
+export interface ShareModalData {
+  open: boolean;
+  homework: Homework;
+  url: string;
+  kakaoText: string;
+  items: Array<{ name: string; sets: number; tags: string[] }>;
+}
 
 type AsyncStatus = "idle" | "loading" | "success" | "error";
 
@@ -115,17 +133,9 @@ const SHARE_NOTICE: Record<ShareResult, Notice> = {
   failed: { tone: "error", message: "공유에 실패했어요. 버튼을 한 번 더 눌러주세요" },
 };
 
-export interface SelectedCardItem {
-  id: string;
-  name: string;
-  koreanOnlyName: string;
-  sets: number;
-  reps: string;
-  cue: string;
-  restSec: number;
-  gifUrl: string;
-  posterUrl: string;
-}
+/* ────────────────────────────────────────────────────────────
+ * 3. Logic Hook
+ * ──────────────────────────────────────────────────────────── */
 
 type UseQuickAssignParams = Omit<QuickAssignDrawerProps, "open" | "onOpenChange">;
 
@@ -141,7 +151,7 @@ export function useQuickAssign({
   const [memberId, setMemberId] = useState<string | null>(prefilledMember?.id ?? null);
   const [isPickingMember, setIsPickingMember] = useState<boolean>(!prefilledMember);
 
-  // 가로 카드 슬롯에 담긴 운동 목록 (기본 2개 추천)
+  // 가로 카드 슬롯에 담긴 운동 목록 (기본 2개 추천 + 운동별 맞춤 코칭 태그)
   const [selectedCards, setSelectedCards] = useState<SelectedCardItem[]>([
     {
       id: "rehab-bird-dog",
@@ -153,6 +163,8 @@ export function useQuickAssign({
       restSec: 30,
       gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/3239-h1ezqSu.gif",
       posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/All_Fours_Quad_Stretch/0.jpg",
+      availableCoachingTags: ["척추 중립", "복압 유지", "허리 꺾임 주의"],
+      selectedCoachingTags: ["척추 중립", "복압 유지"],
     },
     {
       id: "rehab-glute-bridge",
@@ -164,6 +176,8 @@ export function useQuickAssign({
       restSec: 30,
       gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1409-qKBpF7I.gif",
       posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Glute_Bridge/0.jpg",
+      availableCoachingTags: ["골반 수평", "둔근 쥐어짜기", "무릎 모임 방지"],
+      selectedCoachingTags: ["골반 수평", "둔근 쥐어짜기"],
     },
   ]);
 
@@ -171,13 +185,14 @@ export function useQuickAssign({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [isSearching, setIsSearching] = useState<boolean>(false);
 
-  // 코칭 포인트 태그 (원장님이 글 쓸 필요 없이 1초 탭)
-  const [selectedTags, setSelectedTags] = useState<string[]>(["척추 중립", "코어 잘 잡기"]);
-
   const [assignStatus, setAssignStatus] = useState<AsyncStatus>("idle");
   const [assigned, setAssigned] = useState<Homework | null>(null);
   const [scheduleStatus, setScheduleStatus] = useState<AsyncStatus>("idle");
   const [notice, setNotice] = useState<Notice | null>(null);
+
+  // 카카오톡 원터치 공유 모달 상태 (iOS Safari 비동기 차단 방지)
+  const [shareModal, setShareModal] = useState<ShareModalData | null>(null);
+  const [copiedSuccess, setCopiedSuccess] = useState<boolean>(false);
 
   const memberPool = useMemo<Member[]>(() => {
     if (!prefilledMember) return members;
@@ -189,12 +204,10 @@ export function useQuickAssign({
     [memberPool, memberId],
   );
 
-  const lastHomework: Homework | null = memberId ? lastHomeworkByMemberId[memberId] ?? null : null;
-
-  // 실시간 퍼지 검색 결과 (푸시, 푸쉬업, 스쿼트 등)
-  const searchResults = useMemo(() => {
+  // 검색 결과
+  const searchResults = useMemo<RehabExerciseItem[]>(() => {
     if (!searchQuery.trim()) return [];
-    return searchRehabExercises(searchQuery);
+    return searchRehabExercises(searchQuery).slice(0, 6);
   }, [searchQuery]);
 
   // 세트 수 조정 (+ / -)
@@ -205,6 +218,21 @@ export function useQuickAssign({
         if (c.id !== id) return c;
         const nextSets = Math.min(10, Math.max(1, c.sets + delta));
         return { ...c, sets: nextSets };
+      })
+    );
+  }, []);
+
+  // 운동별 코칭 태그 토글 (Pacefit 맞춤 연동)
+  const toggleCardTag = useCallback((cardId: string, tag: string) => {
+    vibrate(6);
+    setSelectedCards((prev) =>
+      prev.map((c) => {
+        if (c.id !== cardId) return c;
+        const exists = c.selectedCoachingTags.includes(tag);
+        const nextTags = exists
+          ? c.selectedCoachingTags.filter((t) => t !== tag)
+          : [...c.selectedCoachingTags, tag];
+        return { ...c, selectedCoachingTags: nextTags };
       })
     );
   }, []);
@@ -227,6 +255,7 @@ export function useQuickAssign({
         setNotice({ tone: "info", message: "이미 담겨있는 운동이에요" });
         return prev;
       }
+      const tags = item.coachingTags && item.coachingTags.length > 0 ? item.coachingTags : ["척추 중립", "복압 유지"];
       return [
         ...prev,
         {
@@ -239,6 +268,8 @@ export function useQuickAssign({
           restSec: item.defaultRestSec,
           gifUrl: item.gifUrl,
           posterUrl: item.posterUrl,
+          availableCoachingTags: tags,
+          selectedCoachingTags: [tags[0]],
         },
       ];
     });
@@ -261,6 +292,8 @@ export function useQuickAssign({
           restSec: 30,
           gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/3239-h1ezqSu.gif",
           posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/All_Fours_Quad_Stretch/0.jpg",
+          availableCoachingTags: ["척추 중립", "복압 유지", "허리 꺾임 주의"],
+          selectedCoachingTags: ["척추 중립", "복압 유지"],
         },
         {
           id: "rehab-glute-bridge",
@@ -272,20 +305,10 @@ export function useQuickAssign({
           restSec: 30,
           gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1409-qKBpF7I.gif",
           posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Glute_Bridge/0.jpg",
-        },
-        {
-          id: "rehab-dead-bug",
-          name: "데드버그 (Dead Bug)",
-          koreanOnlyName: "데드버그",
-          sets: 2,
-          reps: "12회",
-          cue: "허리가 뜨지 않게 배꼽 누르기",
-          restSec: 30,
-          gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/0276-iny3m5y.gif",
-          posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Dead_Bug/0.jpg",
+          availableCoachingTags: ["골반 수평", "둔근 쥐어짜기", "무릎 모임 방지"],
+          selectedCoachingTags: ["골반 수평", "둔근 쥐어짜기"],
         },
       ]);
-      setSelectedTags(["척추 중립", "코어 잘 잡기", "허리 꺾임 주의"]);
     } else if (presetId === "round-shoulder-3") {
       setSelectedCards([
         {
@@ -298,6 +321,8 @@ export function useQuickAssign({
           restSec: 30,
           gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/3541-PbzNu7c.gif",
           posterUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/images/3541-PbzNu7c.jpg",
+          availableCoachingTags: ["하부승모근 집중", "어깨 솟음 방지", "엄지 하늘"],
+          selectedCoachingTags: ["하부승모근 집중", "어깨 솟음 방지"],
         },
         {
           id: "rehab-wall-slide",
@@ -309,9 +334,10 @@ export function useQuickAssign({
           restSec: 30,
           gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/0659-LEH9jxP.gif",
           posterUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/images/0659-LEH9jxP.jpg",
+          availableCoachingTags: ["손등·팔꿈치 밀착", "어깨 하강", "흉추 신전"],
+          selectedCoachingTags: ["손등·팔꿈치 밀착", "어깨 하강"],
         },
       ]);
-      setSelectedTags(["어깨 솟지 않게", "날개뼈 모으기", "호흡 뱉으며 수축"]);
     } else if (presetId === "hip-mobility-4") {
       setSelectedCards([
         {
@@ -324,6 +350,8 @@ export function useQuickAssign({
           restSec: 30,
           gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1710-RQNVT10.gif",
           posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/90_90_Hamstring/0.jpg",
+          availableCoachingTags: ["골반 수평", "상체 세우기", "통증 없는 범위"],
+          selectedCoachingTags: ["골반 수평", "통증 없는 범위"],
         },
         {
           id: "rehab-hip-flexor-lunge",
@@ -335,18 +363,11 @@ export function useQuickAssign({
           restSec: 30,
           gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1564-tFGKm99.gif",
           posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bodyweight_Walking_Lunge/0.jpg",
+          availableCoachingTags: ["골반 후방경사", "장요근 신장", "상체 중립"],
+          selectedCoachingTags: ["골반 후방경사", "장요근 신장"],
         },
       ]);
-      setSelectedTags(["골반 수평 유지", "통증 없는 범위"]);
     }
-  }, []);
-
-  // 코칭 태그 토글
-  const toggleTag = useCallback((tag: string) => {
-    vibrate(6);
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
   }, []);
 
   const selectMember = useCallback((id: string) => {
@@ -359,23 +380,23 @@ export function useQuickAssign({
     setNotice(null);
   }, []);
 
-  const shareHomework = useCallback(
-    async (homework: Homework) => {
-      const memberName = selectedMember?.name ?? "회원";
-      const result = await shareToKakao({
-        url: `/h/${homework.token}`,
-        title: `${memberName}님, 오늘의 운동숙제가 도착했어요`,
-        description: homework.why,
-        buttonTitle: "숙제 시작하기",
-      });
-      setNotice(SHARE_NOTICE[result]);
-    },
-    [selectedMember],
-  );
-
   const assignAndShare = useCallback(async () => {
     if (assigned) {
-      await shareHomework(assigned);
+      const url = toAbsoluteUrl(`/h/${assigned.token}`);
+      const memberName = selectedMember?.name || "회원";
+      setShareModal({
+        open: true,
+        homework: assigned,
+        url,
+        kakaoText: `📋 [${memberName}님 오늘의 운동숙제]\n\n${selectedCards
+          .map((c, i) => `${i + 1}. ${c.koreanOnlyName} ${c.sets}세트 ${c.selectedCoachingTags.map((t) => `#${t}`).join(" ")}`)
+          .join("\n")}\n\n👉 바로 시작하기:\n${url}`,
+        items: selectedCards.map((c) => ({
+          name: c.koreanOnlyName,
+          sets: c.sets,
+          tags: c.selectedCoachingTags,
+        })),
+      });
       return;
     }
 
@@ -385,15 +406,21 @@ export function useQuickAssign({
     }
 
     const memberName = selectedMember?.name || "회원";
-    const exerciseListText = selectedCards.map((c) => `${c.koreanOnlyName} ${c.sets}세트`).join(", ");
-    const tagsText = selectedTags.map((t) => `#${t}`).join(" ");
-    const synthesizedWhy = `${memberName}님, 오늘 수업 피드백을 담은 [${exerciseListText}] 숙제입니다. 💡 코칭 포인트: ${tagsText}`;
+    const exerciseListText = selectedCards
+      .map((c) => {
+        const tagText = c.selectedCoachingTags.length > 0 ? ` (#${c.selectedCoachingTags.join(" #")})` : "";
+        return `${c.koreanOnlyName} ${c.sets}세트${tagText}`;
+      })
+      .join(", ");
+    const allTags = Array.from(new Set(selectedCards.flatMap((c) => c.selectedCoachingTags)));
+    const synthesizedWhy = `${memberName}님, 오늘 수업 피드백을 담은 숙제입니다: ${exerciseListText}`;
 
     const customItems: CustomExerciseItem[] = selectedCards.map((c) => ({
       name: c.name,
       sets: c.sets,
       reps: c.reps,
-      cue: c.cue,
+      cue: c.selectedCoachingTags.length > 0 ? c.selectedCoachingTags.join(", ") : c.cue,
+      coachingTags: c.selectedCoachingTags,
       restSec: c.restSec,
       gifUrl: c.gifUrl,
       posterUrl: c.posterUrl,
@@ -402,7 +429,7 @@ export function useQuickAssign({
     const parsed = assignHomeworkInputSchema.safeParse({
       memberId,
       why: synthesizedWhy,
-      tags: selectedTags,
+      tags: allTags.length > 0 ? allTags : ["척추 중립", "코어 잘 잡기"],
       customItems,
     });
 
@@ -419,7 +446,25 @@ export function useQuickAssign({
       setAssignStatus("success");
       vibrate(20);
       onAssigned?.(homework);
-      await shareHomework(homework);
+
+      const url = toAbsoluteUrl(`/h/${homework.token}`);
+      copyToClipboard(url);
+
+      const kakaoText = `📋 [${memberName}님 오늘의 운동숙제]\n\n${selectedCards
+        .map((c, i) => `${i + 1}. ${c.koreanOnlyName} ${c.sets}세트 ${c.selectedCoachingTags.map((t) => `#${t}`).join(" ")}`)
+        .join("\n")}\n\n👉 바로 시작하기:\n${url}`;
+
+      setShareModal({
+        open: true,
+        homework,
+        url,
+        kakaoText,
+        items: selectedCards.map((c) => ({
+          name: c.koreanOnlyName,
+          sets: c.sets,
+          tags: c.selectedCoachingTags,
+        })),
+      });
     } catch (error) {
       setAssignStatus("error");
       setNotice({
@@ -427,7 +472,7 @@ export function useQuickAssign({
         message: error instanceof Error && error.message ? error.message : "숙제 등록에 실패했어요. 다시 시도해주세요",
       });
     }
-  }, [assigned, memberId, onAssign, onAssigned, selectedCards, selectedMember, selectedTags, shareHomework]);
+  }, [assigned, memberId, onAssign, onAssigned, selectedCards, selectedMember]);
 
   const scheduleNextSession = useCallback(async () => {
     if (!memberId || !suggestedNextSession || scheduleStatus === "success" || scheduleStatus === "loading") return;
@@ -441,48 +486,55 @@ export function useQuickAssign({
       return;
     }
 
-    vibrate(12);
-    setScheduleStatus("success");
+    setScheduleStatus("loading");
     try {
       await onScheduleNextSession(parsed.data);
-      setNotice({ tone: "success", message: `다음 수업 ${suggestedNextSession.label} 예약 완료` });
+      setScheduleStatus("success");
+      vibrate(15);
     } catch {
       setScheduleStatus("error");
-      setNotice({ tone: "error", message: "예약 등록에 실패했어요. 다시 눌러주세요" });
     }
   }, [memberId, onScheduleNextSession, scheduleStatus, suggestedNextSession]);
 
-  const canSubmit =
-    memberId !== null &&
-    selectedCards.length > 0 &&
-    assignStatus !== "loading";
+  const canSubmit = Boolean(memberId) && selectedCards.length > 0 && assignStatus !== "loading";
 
   return {
-    memberPool,
+    memberId,
     selectedMember,
     isPickingMember,
     setIsPickingMember,
+    memberPool,
     selectMember,
+
     selectedCards,
     updateCardSets,
+    toggleCardTag,
     removeCard,
+    addExercise,
+    applyPreset,
+
     searchQuery,
     setSearchQuery,
     isSearching,
     setIsSearching,
     searchResults,
-    addExercise,
-    applyPreset,
-    selectedTags,
-    toggleTag,
-    assigned,
+
     assignStatus,
+    assigned,
     assignAndShare,
     canSubmit,
-    suggestedNextSession: suggestedNextSession ?? null,
+
     scheduleStatus,
+    suggestedNextSession,
     scheduleNextSession,
+
     notice,
+    setNotice,
+
+    shareModal,
+    setShareModal,
+    copiedSuccess,
+    setCopiedSuccess,
   };
 }
 
@@ -546,7 +598,7 @@ export function QuickAssignDrawer(props: QuickAssignDrawerProps) {
   );
 }
 
-function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }: QuickAssignDrawerProps) {
+function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDrawerProps) {
   const qa = useQuickAssign(params);
 
   return (
@@ -586,13 +638,13 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
             <input
               type="text"
               value={qa.searchQuery}
-              onFocus={() => qa.setIsSearching(true)}
               onChange={(e) => {
                 qa.setSearchQuery(e.target.value);
                 qa.setIsSearching(true);
               }}
-              placeholder="운동 검색 (예: 푸시, 버드독, 무릎, 스쿼트)"
-              className="h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#3182F6] focus:bg-white"
+              onFocus={() => qa.setIsSearching(true)}
+              placeholder="운동 검색 (예: 푸시, 버드독, 브릿지, 런지)…"
+              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-10 pr-9 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-[#3182F6] focus:bg-white focus:outline-none transition-colors"
             />
             {qa.searchQuery && (
               <button
@@ -609,63 +661,69 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
           </div>
 
           {/* 검색 결과 드롭다운 */}
-          {qa.isSearching && qa.searchResults.length > 0 && (
-            <div className="max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-lg space-y-1">
-              {qa.searchResults.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => qa.addExercise(item)}
-                  className="flex w-full items-center justify-between rounded-xl p-2 text-left hover:bg-slate-50 transition-colors"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-slate-900">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={item.gifUrl || item.posterUrl}
-                        alt=""
-                        className="size-full object-cover"
-                        loading="lazy"
-                      />
+          <AnimatePresence>
+            {qa.isSearching && qa.searchResults.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="rounded-2xl border border-slate-200 bg-white p-2 shadow-lg space-y-1 max-h-56 overflow-y-auto"
+              >
+                <div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-slate-400">
+                  <span>추천 운동 결과</span>
+                  <span>{qa.searchResults.length}건</span>
+                </div>
+                {qa.searchResults.map((ex) => (
+                  <button
+                    key={ex.id}
+                    type="button"
+                    onClick={() => qa.addExercise(ex)}
+                    className="flex w-full items-center justify-between rounded-xl p-2 text-left hover:bg-slate-50 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="size-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={ex.gifUrl || ex.posterUrl} alt="" className="size-full object-cover" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-xs text-slate-900 truncate group-hover:text-[#3182F6]">
+                          {ex.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400 truncate">
+                          {ex.category} · {ex.defaultReps}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <span className="block text-sm font-bold text-slate-900 truncate">
-                        {item.koreanOnlyName}
-                      </span>
-                      <span className="block text-[11px] text-slate-500 truncate">
-                        {item.category} · {item.defaultReps}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-[#3182F6]/10 px-2.5 py-1 text-xs font-bold text-[#3182F6]">
-                    + 담기
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
+                    <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-700 group-hover:bg-[#3182F6] group-hover:text-white">
+                      + 추가
+                    </span>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* 추천 루틴 칩 (1초 일괄 꽂힘) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            <span className="text-xs font-bold text-slate-400 shrink-0">추천:</span>
+          {/* 원터치 프리셋 버튼들 */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-semibold text-slate-600">
+            <span className="shrink-0 py-1 text-slate-400 font-bold">빠른 세팅:</span>
             <button
               type="button"
               onClick={() => qa.applyPreset("spine-pelvis-5")}
-              className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all"
+              className="shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-1 hover:border-slate-300 hover:bg-slate-50 transition-all active:scale-95"
             >
-              척추·골반 3종
+              척추·골반 2종
             </button>
             <button
               type="button"
               onClick={() => qa.applyPreset("round-shoulder-3")}
-              className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all"
+              className="shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-1 hover:border-slate-300 hover:bg-slate-50 transition-all active:scale-95"
             >
               라운드숄더 2종
             </button>
             <button
               type="button"
               onClick={() => qa.applyPreset("hip-mobility-4")}
-              className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all"
+              className="shrink-0 rounded-xl border border-slate-200 bg-white px-2.5 py-1 hover:border-slate-300 hover:bg-slate-50 transition-all active:scale-95"
             >
               고관절 가동성 2종
             </button>
@@ -681,14 +739,14 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
                 {qa.selectedCards.length}/3
               </span>
             </div>
-            <span className="text-xs text-slate-400">좌우 [-/+]로 세트 조절</span>
+            <span className="text-xs text-slate-400">좌우 [-/+] 세트 · 태그 탭</span>
           </div>
 
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none snap-x">
             {qa.selectedCards.map((card) => (
               <div
                 key={card.id}
-                className="w-48 shrink-0 snap-start rounded-2xl border border-slate-200 bg-white p-3 shadow-xs flex flex-col justify-between transition-all"
+                className="w-52 shrink-0 snap-start rounded-2xl border border-slate-200 bg-white p-3 shadow-xs flex flex-col justify-between transition-all"
               >
                 <div>
                   {/* 동작가이드 썸네일 (무한루프 재생) */}
@@ -709,7 +767,7 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
                     </button>
                   </div>
 
-                  {/* 운동명 & 큐 */}
+                  {/* 운동명 */}
                   <p className="font-black text-sm text-slate-900 truncate">
                     {card.koreanOnlyName}
                   </p>
@@ -719,7 +777,7 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
                 </div>
 
                 {/* 세트 조절 (왼쪽 -, 오른쪽 +) */}
-                <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-100 p-1">
+                <div className="mt-2.5 flex items-center justify-between rounded-xl bg-slate-100 p-1">
                   <button
                     type="button"
                     onClick={() => qa.updateCardSets(card.id, -1)}
@@ -742,6 +800,31 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
                     <Plus className="size-3.5 stroke-[2.5]" />
                   </button>
                 </div>
+
+                {/* 운동별 맞춤 코칭 태그 (Pacefit 연동) */}
+                <div className="mt-2 pt-2 border-t border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-400 mb-1">코칭 포인트</p>
+                  <div className="flex flex-wrap gap-1">
+                    {card.availableCoachingTags.map((tag) => {
+                      const active = card.selectedCoachingTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => qa.toggleCardTag(card.id, tag)}
+                          className={cn(
+                            "rounded-md px-1.5 py-0.5 text-[10px] font-bold transition-all",
+                            active
+                              ? "bg-amber-400 text-slate-900 border border-slate-900 shadow-2xs"
+                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          )}
+                        >
+                          #{tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             ))}
 
@@ -753,7 +836,7 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
                   const input = document.querySelector('input[placeholder*="운동 검색"]') as HTMLInputElement;
                   input?.focus();
                 }}
-                className="w-36 shrink-0 snap-start cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-4 flex flex-col items-center justify-center text-center text-slate-400 gap-1.5 hover:bg-slate-100 hover:border-slate-300 transition-all"
+                className="w-40 shrink-0 snap-start cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-4 flex flex-col items-center justify-center text-center text-slate-400 gap-1.5 hover:bg-slate-100 hover:border-slate-300 transition-all"
               >
                 <div className="flex size-8 items-center justify-center rounded-full bg-white shadow-xs">
                   <Plus className="size-4 text-slate-600" />
@@ -765,39 +848,7 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
           </div>
         </section>
 
-        {/* 4. 코칭 포인트 태그 (문장 작성 완전 제거 · Pacefit 연계) */}
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">
-              💡 코칭 포인트 (탭하여 선택)
-            </span>
-            <span className="text-[10px] text-[#3182F6] font-medium">
-              Pacefit 자동 연동
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {COACHING_TAGS.map((tag) => {
-              const active = qa.selectedTags.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => qa.toggleTag(tag)}
-                  className={cn(
-                    "rounded-xl px-2.5 py-1 text-xs font-semibold transition-all active:scale-95",
-                    active
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  )}
-                >
-                  #{tag}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* 5. 다음 수업 예약 연계 (선택) */}
+        {/* 4. 다음 수업 예약 연계 (선택) */}
         {qa.suggestedNextSession && qa.selectedMember && (
           <button
             type="button"
@@ -825,7 +876,7 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
         )}
       </div>
 
-      {/* 6. 카카오톡으로 보내기 버튼 (1초 발송) */}
+      {/* 5. 카카오톡으로 보내기 버튼 (1초 발송) */}
       <footer className="shrink-0 border-t border-slate-100 bg-white px-6 pb-[max(env(safe-area-inset-bottom),16px)] pt-3">
         <AnimatePresence mode="wait">
           {qa.notice && (
@@ -872,6 +923,110 @@ function QuickAssignBody({ open: _open, onOpenChange: _onOpenChange, ...params }
           )}
         </button>
       </footer>
+
+      {/* 6. 카카오톡 원터치 공유 모달 (iOS 사파리 100% 작동 보장) */}
+      <AnimatePresence>
+        {qa.shareModal && (
+          <div className="fixed inset-0 z-60 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <motion.div
+              initial={{ y: 50, scale: 0.95, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: 50, scale: 0.95, opacity: 0 }}
+              className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl border border-neutral-100 flex flex-col gap-3.5"
+            >
+              <div className="text-center">
+                <div className="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-2">
+                  <Check className="size-6 stroke-[3]" />
+                </div>
+                <h3 className="text-lg font-black text-slate-900">
+                  {qa.selectedMember?.name ?? "회원"}님 숙제 준비 완료!
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  아래 노란 버튼을 누르면 카카오톡으로 바로 공유창이 열립니다
+                </p>
+              </div>
+
+              {/* 출제된 운동 & 코칭 태그 요약 */}
+              <div className="rounded-2xl bg-slate-50 p-3 border border-slate-100 space-y-1.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  출제된 운동 &amp; 코칭 큐
+                </p>
+                {qa.shareModal.items.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-800">
+                      {item.name} {item.sets}세트
+                    </span>
+                    <span className="text-[11px] font-bold text-amber-600 truncate max-w-[140px]">
+                      {item.tags.map((t) => `#${t}`).join(" ")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* 1. 카카오톡으로 바로 공유하기 (동기식 직접 탭이므로 iOS Safari 100% 작동) */}
+              <button
+                type="button"
+                onClick={() => {
+                  vibrate(15);
+                  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+                    navigator.share({
+                      title: `${qa.selectedMember?.name ?? "회원"}님 오늘의 운동숙제`,
+                      text: qa.shareModal?.kakaoText,
+                      url: qa.shareModal?.url,
+                    }).catch(() => {});
+                  } else {
+                    copyToClipboard(qa.shareModal?.url ?? "");
+                    window.open("kakaotalk://", "_blank");
+                  }
+                }}
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#FEE500] text-sm font-black text-[#191919] shadow-sm active:scale-[0.98] transition-transform"
+              >
+                <MessageCircle className="size-5 fill-current" />
+                <span>카카오톡으로 바로 공유하기 (탭)</span>
+              </button>
+
+              {/* 2. 링크 복사 & 회원 화면 보기 */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    vibrate(10);
+                    if (qa.shareModal?.url) {
+                      await copyToClipboard(qa.shareModal.url);
+                      qa.setCopiedSuccess(true);
+                      setTimeout(() => qa.setCopiedSuccess(false), 2000);
+                    }
+                  }}
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Copy className="size-4" />
+                  <span>{qa.copiedSuccess ? "✓ 복사 완료!" : "링크 복사"}</span>
+                </button>
+                <a
+                  href={qa.shareModal.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <ExternalLink className="size-4" />
+                  <span>회원 화면 보기</span>
+                </a>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  qa.setShareModal(null);
+                  onOpenChange(false);
+                }}
+                className="w-full py-1 text-center text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                완료하고 닫기
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

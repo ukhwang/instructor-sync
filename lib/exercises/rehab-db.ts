@@ -25,6 +25,7 @@ export interface RehabExerciseItem {
   gifUrl: string;
   posterUrl: string;
   tags: string[];
+  coachingTags: string[];
   equipment: "맨몸" | "매트" | "밴드" | "폼롤러" | "벽/의자";
   difficulty: "초급" | "중급";
 }
@@ -37,6 +38,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   // ── 1. 허리 / 코어 (Lumbar & Core) ──
   {
     id: "rehab-bird-dog",
+    coachingTags: ['척추 중립', '복압 유지', '허리 꺾임 주의'],
     name: "버드독 (Bird Dog)",
     koreanOnlyName: "버드독",
     englishName: "Bird Dog",
@@ -55,6 +57,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-dead-bug",
+    coachingTags: ['허리 바닥 밀착', '복압 유지', '골반 흔들림 방지'],
     name: "데드버그 (Dead Bug)",
     koreanOnlyName: "데드버그",
     englishName: "Dead Bug",
@@ -73,6 +76,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-cat-cow",
+    coachingTags: ['호흡 일치', '분절 움직임', '과신전 금지'],
     name: "고양이-소 자세 (캣 카우)",
     koreanOnlyName: "고양이-소 자세",
     englishName: "Cat-Cow Stretch",
@@ -91,6 +95,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-pelvic-tilt",
+    coachingTags: ['골반 후방경사', '하복부 수축', '둔근 이완'],
     name: "골반 기울이기 (Pelvic Tilt)",
     koreanOnlyName: "골반 기울이기",
     englishName: "Pelvic Tilt",
@@ -109,6 +114,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-mcgill-curlup",
+    coachingTags: ['경추 중립', '복직근 집중', '허리 곡선 유지'],
     name: "맥길 빅3 컬업 (Curl-Up)",
     koreanOnlyName: "맥길 빅3 컬업",
     englishName: "McGill Curl-Up",
@@ -127,6 +133,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-side-plank",
+    coachingTags: ['골반 처짐 방지', '어깨 지지', '직선 유지'],
     name: "사이드 플랭크 (Side Plank)",
     koreanOnlyName: "사이드 플랭크",
     englishName: "Side Plank",
@@ -145,6 +152,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-bear-hold",
+    coachingTags: ['무릎 2cm 띄우기', '전거근 활성화', '골반 중립'],
     name: "베어 홀드 (Bear Hold)",
     koreanOnlyName: "베어 홀드",
     englishName: "Bear Hold",
@@ -163,6 +171,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-cobra-stretch",
+    coachingTags: ['치골 바닥 밀착', '어깨 하강', '허리 통증 시 중단'],
     name: "코브라 자세 (상부 흉추 신전)",
     koreanOnlyName: "코브라 자세",
     englishName: "Cobra Stretch",
@@ -183,6 +192,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   // ── 2. 고관절 / 둔근 (Hip & Pelvis) ──
   {
     id: "rehab-glute-bridge",
+    coachingTags: ['골반 수평', '둔근 쥐어짜기', '무릎 모임 방지'],
     name: "글루트 브릿지 (Glute Bridge)",
     koreanOnlyName: "글루트 브릿지",
     englishName: "Glute Bridge",
@@ -201,6 +211,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-clamshell",
+    coachingTags: ['골반 뒤로 눕지 않기', '중둔근 집중', '뒤꿈치 밀착'],
     name: "사이드 라잉 클램쉘 (Clamshell)",
     koreanOnlyName: "사이드 라잉 클램쉘",
     englishName: "Clamshell",
@@ -219,6 +230,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-90-90-hip",
+    coachingTags: ['골반 수평', '상체 세우기', '통증 없는 범위'],
     name: "90-90 고관절 회전 스트레칭",
     koreanOnlyName: "90-90 고관절 회전",
     englishName: "90-90 Hip Mobility",
@@ -237,6 +249,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-hip-flexor-lunge",
+    coachingTags: ['골반 후방경사', '장요근 신장', '상체 중립'],
     name: "런지 & 힙 플렉서 스트레칭",
     koreanOnlyName: "런지 힙 플렉서 스트레칭",
     englishName: "Lunge Hip Flexor Stretch",
@@ -255,6 +268,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-piriformis-stretch",
+    coachingTags: ['호흡 깊게', '이상근 이완', '골반 정렬'],
     name: "이상근 4자 스트레칭 (Figure-4)",
     koreanOnlyName: "이상근 4자 스트레칭",
     englishName: "Figure-4 Piriformis Stretch",
@@ -273,6 +287,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-frog-stretch",
+    coachingTags: ['내전근 이완', '요추 과신전 주의', '천천히 호흡'],
     name: "개구리 자세 고관절 모빌리티",
     koreanOnlyName: "개구리 자세",
     englishName: "Frog Pose Mobility",
@@ -293,6 +308,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   // ── 3. 어깨 / 흉추 (Shoulder & Thoracic) ──
   {
     id: "rehab-prone-y-raise",
+    coachingTags: ['하부승모근 집중', '어깨 솟음 방지', '엄지 하늘'],
     name: "엎드려 Y-레이즈 (Prone Y-Raise)",
     koreanOnlyName: "엎드려 Y-레이즈",
     englishName: "Prone Y-Raise",
@@ -311,6 +327,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-wall-slide",
+    coachingTags: ['손등·팔꿈치 밀착', '어깨 하강', '흉추 신전'],
     name: "월 슬라이드 (Wall Slide)",
     koreanOnlyName: "월 슬라이드",
     englishName: "Wall Slide",
@@ -329,6 +346,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-thoracic-open-book",
+    coachingTags: ['골반 고정', '흉추만 회전', '시선 손끝'],
     name: "흉추 회전 (오픈 북)",
     koreanOnlyName: "흉추 회전 (오픈 북)",
     englishName: "Thoracic Open Book",
@@ -347,6 +365,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-scapular-pushup",
+    coachingTags: ['팔꿈치 완전 고정', '날개뼈 모으기/벌리기', '전거근 활성화'],
     name: "견갑골 푸쉬업 (Scapular Push-Up)",
     koreanOnlyName: "견갑골 푸쉬업",
     englishName: "Scapular Push-Up",
@@ -365,6 +384,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-band-external-rotation",
+    coachingTags: ['팔꿈치 옆구리 밀착', '손목 중립', '극하근 자극'],
     name: "밴드 숄더 외회전 (회전근개 강화)",
     koreanOnlyName: "밴드 숄더 외회전",
     englishName: "Band Shoulder External Rotation",
@@ -383,6 +403,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-pendulum",
+    coachingTags: ['어깨 완전 힘 빼기', '상체 반동', '견관절 이완'],
     name: "숄더 펜듈럼 (진자 운동)",
     koreanOnlyName: "숄더 펜듈럼",
     englishName: "Shoulder Pendulum Exercise",
@@ -403,6 +424,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   // ── 4. 무릎 / 하체 / 발목 (Knee & Lower Body) ──
   {
     id: "rehab-quad-sets",
+    coachingTags: ['무릎 오금 바닥 누르기', '대퇴사두근 수축', '발목 당기기'],
     name: "쿼드 셋 (대퇴사두근 힘주기)",
     koreanOnlyName: "쿼드 셋",
     englishName: "Quad Sets (Knee Extension)",
@@ -421,6 +443,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-heel-slides",
+    coachingTags: ['통증 직전까지 굽히기', '골반 정렬', '부드러운 움직임'],
     name: "힐 슬라이드 (Heel Slides)",
     koreanOnlyName: "힐 슬라이드",
     englishName: "Heel Slides (Knee ROM)",
@@ -439,6 +462,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-wall-squat",
+    coachingTags: ['무릎 발끝 정렬', '허리 벽 밀착', '대퇴사두근 집중'],
     name: "미니 스쿼트 (벽 지지)",
     koreanOnlyName: "미니 스쿼트 (벽 지지)",
     englishName: "Wall Mini-Squat",
@@ -457,6 +481,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-calf-raise",
+    coachingTags: ['엄지발가락 힘', '발목 안쪽 꺾임 방지', '천천히 하강'],
     name: "카프 레이즈 (비복근/가자미근)",
     koreanOnlyName: "카프 레이즈",
     englishName: "Standing Calf Raise",
@@ -475,6 +500,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-ankle-dorsiflexion",
+    coachingTags: ['발목 가동성', '종아리 이완', '발꿈치 고정'],
     name: "벽 발목 배측굴곡 모빌리티",
     koreanOnlyName: "발목 배측굴곡 모빌리티",
     englishName: "Ankle Dorsiflexion Mobility",
@@ -493,6 +519,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-short-foot",
+    coachingTags: ['발 아치 살리기', '발가락 굽히지 않기', '내재근 활성화'],
     name: "단족 운동 (Short Foot / 발 아치)",
     koreanOnlyName: "단족 운동",
     englishName: "Short Foot Exercise",
@@ -513,6 +540,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   // ── 5. 목 / 상체 자세 교정 (Neck & Upper Body) ──
   {
     id: "rehab-chin-tuck",
+    coachingTags: ['이중턱 만들기', '경추 후인', '어깨 힘 빼기'],
     name: "친 턱 (Chin Tuck / 거북목 교정)",
     koreanOnlyName: "친 턱",
     englishName: "Chin Tuck",
@@ -531,6 +559,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-scm-release",
+    coachingTags: ['흉쇄유돌근 이완', '부드럽게 마사지', '목 당김 완화'],
     name: "흉쇄유돌근 & 사각근 릴리즈",
     koreanOnlyName: "흉쇄유돌근 릴리즈",
     englishName: "SCM & Scalene Release",
@@ -549,6 +578,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-pec-minor-stretch",
+    coachingTags: ['소흉근 신장', '어깨 전면 스트레칭', '갈비뼈 들리지 않기'],
     name: "소흉근 벽 스트레칭 (가슴 열기)",
     koreanOnlyName: "소흉근 벽 스트레칭",
     englishName: "Pec Minor Wall Stretch",
@@ -567,6 +597,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-upper-trap-stretch",
+    coachingTags: ['어깨 지그시 내리기', '반대 손 고정', '승모근 이완'],
     name: "상부 승모근 스트레칭 (목선 이완)",
     koreanOnlyName: "상부 승모근 스트레칭",
     englishName: "Upper Trapezius Stretch",
@@ -585,6 +616,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-standard-pushup",
+    coachingTags: ['손목 정렬', '가슴 바닥 터치', '어깨 솟음 방지'],
     name: "기본 푸시업 (Push-Up)",
     koreanOnlyName: "기본 푸시업",
     englishName: "Standard Push-Up",
@@ -603,6 +635,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-knee-pushup",
+    coachingTags: ['코어 일직선', '손목 부담 완화', '가슴 자극'],
     name: "무릎 대고 푸쉬업 (Knee Push-Up)",
     koreanOnlyName: "무릎 대고 푸쉬업",
     englishName: "Knee Push-Up",
@@ -621,6 +654,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-wall-pushup",
+    coachingTags: ['팔꿈치 45도 각도', '손목 중립', '가슴 펴기'],
     name: "인클라인 벽 푸쉬업 (Wall Push-Up)",
     koreanOnlyName: "인클라인 벽 푸쉬업",
     englishName: "Wall Incline Push-Up",
@@ -639,6 +673,7 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
   },
   {
     id: "rehab-diamond-pushup",
+    coachingTags: ['삼두근 집중', '손목 무리 시 중단', '코어 단단히'],
     name: "다이아몬드 푸쉬업 (Diamond Push-Up)",
     koreanOnlyName: "다이아몬드 푸쉬업",
     englishName: "Diamond Push-Up",

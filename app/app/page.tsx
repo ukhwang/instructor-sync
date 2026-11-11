@@ -54,12 +54,6 @@ export default async function TrainerDashboardPage() {
         <div className="flex flex-wrap gap-3 items-center">
           <QuickAssignTrigger members={members} />
           <Link
-            href="/app/homework/new"
-            className="brutalist-btn-yellow text-sm font-black"
-          >
-            + 정밀 숙제 작성
-          </Link>
-          <Link
             href="/app/members"
             className="brutalist-btn-secondary text-sm font-bold"
           >

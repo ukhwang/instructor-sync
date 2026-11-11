@@ -23,6 +23,7 @@ import { MemberProgressPanel } from "@/components/member-progress/MemberProgress
 import { getMemberBriefingAction } from "@/app/actions/briefing";
 import type { Briefing } from "@/lib/briefing/types";
 import { SessionBriefingCard } from "@/components/briefing/SessionBriefingCard";
+import { QuickAssignTrigger } from "@/components/homework/QuickAssignTrigger";
 
 const IMPORT_SOURCE_LABELS: Record<MemberImportSourceType, string> = {
   direct_entry: "직접 작성",
@@ -232,12 +233,15 @@ export default function MemberDetailPage({
           >
             수업 준비 열기
           </Link>
-          <Link
-            href={`/app/homework/new?memberId=${member.id}`}
-            className="brutalist-btn-yellow min-h-11 rounded-xl text-xs font-bold"
-          >
-            + 새 숙제 작성
-          </Link>
+          <QuickAssignTrigger
+            members={[member]}
+            prefilledMember={member}
+            buttonLabel="+ 새 숙제 작성"
+            buttonClassName="brutalist-btn-yellow min-h-11 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5 px-3.5"
+            onAssigned={() => {
+              getHomeworksForMember(member.id).then(setHomeworks);
+            }}
+          />
         </div>
       </div>
 
@@ -567,12 +571,15 @@ export default function MemberDetailPage({
                 회원에게 전달된 숙제와 제출 상태입니다.
               </p>
             </div>
-            <Link
-              href={`/app/homework/new?memberId=${member.id}`}
-              className="text-xs font-black px-2.5 py-1 border-2 border-black bg-yellow-400 hover:bg-yellow-300"
-            >
-              + 새 숙제
-            </Link>
+            <QuickAssignTrigger
+              members={[member]}
+              prefilledMember={member}
+              buttonLabel="+ 새 숙제"
+              buttonClassName="text-xs font-black px-2.5 py-1 border-2 border-black bg-yellow-400 hover:bg-yellow-300 inline-flex items-center gap-1 shadow-2xs"
+              onAssigned={() => {
+                getHomeworksForMember(member.id).then(setHomeworks);
+              }}
+            />
           </div>
 
           <div className="space-y-3">
