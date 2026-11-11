@@ -44,48 +44,54 @@ export interface RecentFeedbackResult {
 export async function fetchRecentFeedback(
   memberId: string,
 ): Promise<RecentFeedbackResult | null> {
-  const supabase = await createClient();
-
-  const memberRes = await supabase
-    .from(MEMBERS_TABLE)
-    .select('id, name')
-    .eq('id', memberId)
-    .maybeSingle();
-  if (memberRes.error) throw new Error(memberRes.error.message);
-
-  const member = MemberRowSchema.safeParse(memberRes.data);
-  if (!member.success) return null;
-
-  const submissionRes = await supabase
-    .from(SUBMISSIONS_TABLE)
-    .select(
-      'submitted_at, completed_sets, prescribed_sets, feel, pain_areas, pain_score, voice_memo',
-    )
-    .eq('member_id', memberId)
-    .order('submitted_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (submissionRes.error) throw new Error(submissionRes.error.message);
-
-  if (submissionRes.data === null) {
-    return { memberName: member.data.name, feedback: null };
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return null;
   }
 
-  const row = SubmissionRowSchema.parse(submissionRes.data);
-  const painAreas = (row.pain_areas ?? []).flatMap((area) => {
-    const parsed = PainAreaSchema.safeParse(area);
-    return parsed.success ? [parsed.data] : [];
-  });
+  try {
+    const supabase = await createClient();
 
-  const feedback = FeedbackInputSchema.parse({
-    submittedAt: row.submitted_at,
-    completedSets: row.completed_sets,
-    prescribedSets: row.prescribed_sets,
-    feel: row.feel,
-    painAreas,
-    painScore: row.pain_score,
-    voiceMemo: row.voice_memo,
-  });
+    const memberRes = await supabase
+      .from(MEMBERS_TABLE)
+      .select('id, name')
+      .eq('id', memberId)
+      .maybeSingle();
+    if (memberRes.error || !memberRes.data) return null;
 
-  return { memberName: member.data.name, feedback };
+    const member = MemberRowSchema.safeParse(memberRes.data);
+    if (!member.success) return null;
+
+    const submissionRes = await supabase
+      .from(SUBMISSIONS_TABLE)
+      .select(
+        'submitted_at, completed_sets, prescribed_sets, feel, pain_areas, pain_score, voice_memo',
+      )
+      .eq('member_id', memberId)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (submissionRes.error || !submissionRes.data) {
+      return { memberName: member.data.name, feedback: null };
+    }
+
+    const row = SubmissionRowSchema.parse(submissionRes.data);
+    const painAreas = (row.pain_areas ?? []).flatMap((area) => {
+      const parsed = PainAreaSchema.safeParse(area);
+      return parsed.success ? [parsed.data] : [];
+    });
+
+    const feedback = FeedbackInputSchema.parse({
+      submittedAt: row.submitted_at,
+      completedSets: row.completed_sets,
+      prescribedSets: row.prescribed_sets,
+      feel: row.feel,
+      painAreas,
+      painScore: row.pain_score,
+      voiceMemo: row.voice_memo,
+    });
+
+    return { memberName: member.data.name, feedback };
+  } catch {
+    return null;
+  }
 }
