@@ -20,8 +20,8 @@ type HomeworkMediaSource = {
 
 // GitHub 퍼블릭 도메인(CC0) 오픈소스 운동 DB 기반 CDN 베이스 URL
 // 1. hasaneyldrm/exercises-dataset: 1,324개 고품질 180p 무한 루프 애니메이션 GIF
-const GITHUB_GIF_CDN_BASE = "https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@main/videos";
-const GITHUB_IMAGE_CDN_BASE = "https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@main/images";
+const GITHUB_GIF_CDN_BASE = "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos";
+const GITHUB_IMAGE_CDN_BASE = "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/images";
 // 2. yuhonas/free-exercise-db: 876개 고화질 포스터 사진
 const GITHUB_FREE_EXERCISE_DB_BASE = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises";
 

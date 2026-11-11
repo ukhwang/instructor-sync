@@ -29,8 +29,8 @@ export interface RehabExerciseItem {
   difficulty: "초급" | "중급";
 }
 
-const GIF_BASE = "https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@main/videos";
-const IMG_BASE = "https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@main/images";
+const GIF_BASE = "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos";
+const IMG_BASE = "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/images";
 const POSTER_BASE = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises";
 
 export const REHAB_EXERCISES: RehabExerciseItem[] = [
@@ -583,6 +583,78 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
     equipment: "맨몸",
     difficulty: "초급",
   },
+  {
+    id: "rehab-standard-pushup",
+    name: "기본 푸시업 (Push-Up)",
+    koreanOnlyName: "기본 푸시업",
+    englishName: "Standard Push-Up",
+    category: "어깨/흉추",
+    painAreas: ["어깨"],
+    defaultSets: 3,
+    defaultReps: "10회",
+    defaultRestSec: 30,
+    defaultCue: "손목과 팔꿈치가 일직선이 되도록 가슴을 내렸다 밉니다.",
+    instruction: "머리부터 발끝까지 일직선을 유지하고 팔꿈치를 45도 각도로 접어 가슴이 바닥에 닿기 직전까지 내렸다가 힘차게 바닥을 밉니다.",
+    gifUrl: `${GIF_BASE}/0662-X1F1bfe.gif`,
+    posterUrl: `${IMG_BASE}/0662-X1F1bfe.jpg`,
+    tags: ["푸시", "푸쉬", "푸시업", "푸쉬업", "가슴", "상체근력", "대흉근", "삼두"],
+    equipment: "맨몸",
+    difficulty: "중급",
+  },
+  {
+    id: "rehab-knee-pushup",
+    name: "무릎 대고 푸쉬업 (Knee Push-Up)",
+    koreanOnlyName: "무릎 대고 푸쉬업",
+    englishName: "Knee Push-Up",
+    category: "어깨/흉추",
+    painAreas: ["어깨"],
+    defaultSets: 3,
+    defaultReps: "12회",
+    defaultRestSec: 30,
+    defaultCue: "무릎을 대고 허리가 꺾이지 않도록 상체를 바르게 내립니다.",
+    instruction: "무릎을 바닥에 대고 엎드려 상체 부담을 줄인 상태에서 가슴을 바닥 가까이 내렸다가 밀어 올립니다.",
+    gifUrl: `${GIF_BASE}/2398-v3vLFW0.gif`,
+    posterUrl: `${IMG_BASE}/2398-v3vLFW0.jpg`,
+    tags: ["푸시", "푸쉬", "푸시업", "푸쉬업", "무릎푸시업", "초보자푸시업", "가슴"],
+    equipment: "매트",
+    difficulty: "초급",
+  },
+  {
+    id: "rehab-wall-pushup",
+    name: "인클라인 벽 푸쉬업 (Wall Push-Up)",
+    koreanOnlyName: "인클라인 벽 푸쉬업",
+    englishName: "Wall Incline Push-Up",
+    category: "어깨/흉추",
+    painAreas: ["어깨", "목"],
+    defaultSets: 3,
+    defaultReps: "15회",
+    defaultRestSec: 20,
+    defaultCue: "벽을 짚고 어깨와 손목에 무리 없이 가슴만 밀어냅니다.",
+    instruction: "벽에서 한 걸음 떨어져 손을 짚고 팔꿈치를 굽혀 가슴을 벽으로 접근시켰다 밀어내는 가장 안전한 재활 푸시업입니다.",
+    gifUrl: `${GIF_BASE}/1407-PzNxakt.gif`,
+    posterUrl: `${IMG_BASE}/1407-PzNxakt.jpg`,
+    tags: ["푸시", "푸쉬", "푸시업", "푸쉬업", "벽푸시업", "시니어푸시업", "손목보호"],
+    equipment: "벽/의자",
+    difficulty: "초급",
+  },
+  {
+    id: "rehab-diamond-pushup",
+    name: "다이아몬드 푸쉬업 (Diamond Push-Up)",
+    koreanOnlyName: "다이아몬드 푸쉬업",
+    englishName: "Diamond Push-Up",
+    category: "어깨/흉추",
+    painAreas: ["어깨"],
+    defaultSets: 3,
+    defaultReps: "8회",
+    defaultRestSec: 40,
+    defaultCue: "양손 엄지와 검지를 모아 삼각형을 만들고 삼두에 집중합니다.",
+    instruction: "손을 다이아몬드 형태로 모아 가슴 안쪽과 삼두근에 강한 자극을 유도합니다.",
+    gifUrl: `${GIF_BASE}/0283-soIB2rj.gif`,
+    posterUrl: `${IMG_BASE}/0283-soIB2rj.jpg`,
+    tags: ["푸시", "푸쉬", "푸시업", "푸쉬업", "삼두", "팔뚝살"],
+    equipment: "매트",
+    difficulty: "중급",
+  },
 ];
 
 /**
@@ -591,25 +663,38 @@ export const REHAB_EXERCISES: RehabExerciseItem[] = [
  * @param painArea 특정 통증 부위 필터링 (선택)
  */
 export function searchRehabExercises(query = "", painArea?: PainArea | "전체"): RehabExerciseItem[] {
-  const normalizedQuery = query.trim().toLowerCase().replace(/[\s\-_()]/g, "");
+  const raw = query.trim().toLowerCase();
+  const normalizedQuery = raw.replace(/[\s\-_()]/g, "");
+
+  const synonyms: Record<string, string[]> = {
+    "푸시": ["푸시", "푸쉬", "push", "푸시업", "푸쉬업"],
+    "푸쉬": ["푸시", "푸쉬", "push", "푸시업", "푸쉬업"],
+    "푸시업": ["푸시", "푸쉬", "push", "푸시업", "푸쉬업"],
+    "푸쉬업": ["푸시", "푸쉬", "push", "푸시업", "푸쉬업"],
+    "push": ["푸시", "푸쉬", "push", "푸시업", "푸쉬업"],
+    "스쿼트": ["스쿼트", "squat"],
+    "플랭크": ["플랭크", "plank"],
+    "버드": ["버드독", "bird"],
+    "브릿지": ["브릿지", "bridge"],
+  };
+
+  const expandedTerms = synonyms[normalizedQuery] || [normalizedQuery];
 
   return REHAB_EXERCISES.filter((item) => {
-    // 1. 통증 부위 필터 검사
     if (painArea && painArea !== "전체") {
       if (!item.painAreas.includes(painArea)) return false;
     }
 
-    // 2. 검색어가 비어 있으면 전체 반환
     if (!normalizedQuery) return true;
 
-    // 3. 다차원 검색 매칭
-    const nameMatch = item.name.toLowerCase().replace(/[\s\-_()]/g, "").includes(normalizedQuery);
-    const engMatch = item.englishName.toLowerCase().replace(/[\s\-_()]/g, "").includes(normalizedQuery);
-    const tagMatch = item.tags.some((tag) => tag.toLowerCase().replace(/[\s\-_()]/g, "").includes(normalizedQuery));
-    const catMatch = item.category.toLowerCase().replace(/[\s\-_()]/g, "").includes(normalizedQuery);
-    const eqMatch = item.equipment.toLowerCase().replace(/[\s\-_()]/g, "").includes(normalizedQuery);
-
-    return nameMatch || engMatch || tagMatch || catMatch || eqMatch;
+    return expandedTerms.some((term) => {
+      const nameMatch = item.name.toLowerCase().replace(/[\s\-_()]/g, "").includes(term);
+      const engMatch = item.englishName.toLowerCase().replace(/[\s\-_()]/g, "").includes(term);
+      const tagMatch = item.tags.some((tag) => tag.toLowerCase().replace(/[\s\-_()]/g, "").includes(term));
+      const catMatch = item.category.toLowerCase().replace(/[\s\-_()]/g, "").includes(term);
+      const eqMatch = item.equipment.toLowerCase().replace(/[\s\-_()]/g, "").includes(term);
+      return nameMatch || engMatch || tagMatch || catMatch || eqMatch;
+    });
   });
 }
 
@@ -626,3 +711,17 @@ export function getRehabExerciseById(id: string): RehabExerciseItem | undefined 
 export function getExercisesByPainArea(painArea: PainArea): RehabExerciseItem[] {
   return REHAB_EXERCISES.filter((item) => item.painAreas.includes(painArea));
 }
+
+export const COACHING_TAGS = [
+  "척추 중립",
+  "코어 잘 잡기",
+  "허리 꺾임 주의",
+  "골반 수평 유지",
+  "어깨 솟지 않게",
+  "호흡 뱉으며 수축",
+  "통증 없는 범위",
+  "날개뼈 모으기",
+  "무릎 모임 주의",
+  "턱 당기기",
+] as const;
+export type CoachingTag = (typeof COACHING_TAGS)[number];
