@@ -3,6 +3,8 @@ import { getMembers, getAllHomeworks } from "@/lib/db-server";
 import { getSeoulDateTimeString } from "@/lib/token";
 import { buildCareQueue, CARE_QUEUE_LABELS } from "@/lib/care-queue";
 import { QuickAssignTrigger } from "@/components/homework/QuickAssignTrigger";
+import { getMemberBriefing } from "@/lib/briefing/service";
+import { SessionBriefingCard } from "@/components/briefing/SessionBriefingCard";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,10 @@ export default async function TrainerDashboardPage() {
     getAllHomeworks(),
   ]);
   const careQueue = buildCareQueue(members, homeworks);
+
+  // Priority Briefing for today's upcoming session
+  const primaryMember = careQueue[0]?.member || members[0];
+  const primaryBriefing = primaryMember ? await getMemberBriefing(primaryMember.id) : null;
 
   // Calculate Funnel Metrics
   const totalMembers = members.length;
@@ -61,6 +67,17 @@ export default async function TrainerDashboardPage() {
           </Link>
         </div>
       </div>
+
+      {/* 3초 AI 수업 브리핑 카드 */}
+      {primaryBriefing && (
+        <section aria-label="수업 전 3초 AI 브리핑" className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold tracking-tight">수업 전 3초 AI 브리핑</h2>
+            <span className="text-xs font-mono text-neutral-500">수업 10분 전 자동 생성</span>
+          </div>
+          <SessionBriefingCard briefing={primaryBriefing} variant="dashboard" />
+        </section>
+      )}
 
       {/* Funnel Metrics Grid */}
       <div>

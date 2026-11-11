@@ -20,6 +20,9 @@ import {
 } from "@/lib/types";
 import { getSeoulDateTimeString } from "@/lib/token";
 import { MemberProgressPanel } from "@/components/member-progress/MemberProgressPanel";
+import { getMemberBriefingAction } from "@/app/actions/briefing";
+import type { Briefing } from "@/lib/briefing/types";
+import { SessionBriefingCard } from "@/components/briefing/SessionBriefingCard";
 
 const IMPORT_SOURCE_LABELS: Record<MemberImportSourceType, string> = {
   direct_entry: "직접 작성",
@@ -37,6 +40,7 @@ export default function MemberDetailPage({
   const memberId = resolvedParams.id;
 
   const [member, setMember] = useState<Member | null>(null);
+  const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [sessionNotes, setSessionNotes] = useState<SessionNote[]>([]);
   const [importRecords, setImportRecords] = useState<MemberImportRecord[]>([]);
@@ -69,13 +73,17 @@ export default function MemberDetailPage({
     setLoading(true);
     setLoadError("");
     try {
-      const [m, hwList, notes, imported] = await Promise.all([
+      const [m, hwList, notes, imported, briefingRes] = await Promise.all([
         getMemberById(memberId),
         getHomeworksForMember(memberId),
         getSessionNotesForMember(memberId),
         getMemberImportRecords(memberId),
+        getMemberBriefingAction({ memberId }),
       ]);
       setMember(m);
+      if (briefingRes.ok) {
+        setBriefing(briefingRes.data);
+      }
       if (m) {
         setEditRemaining(m.package_remaining);
         setEditEndState(m.end_state);
@@ -232,6 +240,17 @@ export default function MemberDetailPage({
           </Link>
         </div>
       </div>
+
+      {/* 3초 AI 수업 브리핑 카드 */}
+      {briefing && (
+        <section aria-label="수업 전 3초 AI 브리핑" className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold tracking-tight">수업 전 3초 AI 브리핑</h2>
+            <span className="text-xs font-mono text-neutral-500">최근 숙제 피드백 기반</span>
+          </div>
+          <SessionBriefingCard briefing={briefing} variant="detail" />
+        </section>
+      )}
 
       {/* Member Info Card */}
       <div
