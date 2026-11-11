@@ -1,3 +1,5 @@
+import { REHAB_EXERCISES } from "./exercises/rehab-db";
+
 export interface ExerciseMedia {
   video?: string;
   animatedFallback?: string;
@@ -151,6 +153,23 @@ export function getExerciseMedia(name: string): ExerciseMedia | null {
   }
   if (normalized.includes("런지") || normalized.includes("lunge")) {
     return MEDIA_BY_EXERCISE["런지 (Lunge)"];
+  }
+
+  // 3. 재활 통합 마스터 DB(rehab-db) 자동 검색 매칭
+  const rehabMatch = REHAB_EXERCISES.find(
+    (ex) =>
+      ex.name === trimmed ||
+      ex.koreanOnlyName === trimmed ||
+      ex.englishName.toLowerCase() === trimmed.toLowerCase() ||
+      normalized.includes(ex.koreanOnlyName.toLowerCase().replace(/[\s\-_()]/g, "")) ||
+      (ex.englishName && normalized.includes(ex.englishName.toLowerCase().replace(/[\s\-_()]/g, "")))
+  );
+  if (rehabMatch) {
+    return {
+      animatedFallback: rehabMatch.gifUrl,
+      poster: rehabMatch.posterUrl,
+      alt: `${rehabMatch.name} 재활 동작 안내`,
+    };
   }
 
   return null;

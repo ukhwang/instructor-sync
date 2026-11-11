@@ -612,7 +612,11 @@ function HomeworkNewContent() {
               value={items.filter((item) => item.name).map((item) => item.name).join(", ")}
               onSelect={(selected) => {
                 const ok = addSeedItem(selected);
-                if (!ok) alert("운동 동작은 최대 3개까지만 추가할 수 있습니다.");
+                if (!ok) {
+                  alert("운동 동작은 최대 3개까지만 추가할 수 있습니다.");
+                } else {
+                  setShowSeedPicker(false);
+                }
               }}
               label="운동 검색"
             />

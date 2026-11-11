@@ -75,15 +75,21 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7); // 7일 후 만료
 
-  const presetCatalog = parsed.presetId !== "repeat-last" ? PRESET_ITEMS[parsed.presetId] : PRESET_ITEMS["spine-pelvis-5"];
-  const dbItems = presetCatalog.map((item, idx) => {
+  const hasCustom = parsed.customItems && parsed.customItems.length > 0;
+  const itemsToCreate = hasCustom
+    ? parsed.customItems!
+    : (parsed.presetId && parsed.presetId !== "repeat-last"
+        ? PRESET_ITEMS[parsed.presetId]
+        : PRESET_ITEMS["spine-pelvis-5"]);
+
+  const dbItems = itemsToCreate.map((item, idx) => {
     const media = getExerciseMedia(item.name);
     return {
       name: item.name,
       cue: item.cue,
       target_sets: item.sets,
       target_reps: item.reps,
-      rest_seconds: item.restSec,
+      rest_seconds: item.restSec || 30,
       order_index: idx + 1,
       media_url: media?.video || media?.animatedFallback || media?.poster || null,
       media_type: media?.video ? "video" : (media?.animatedFallback ? "gif" : (media?.poster ? "image" : null)),
