@@ -678,7 +678,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                     key={ex.id}
                     type="button"
                     onClick={() => qa.addExercise(ex)}
-                    className="flex w-full items-center justify-between rounded-xl p-2 text-left hover:bg-slate-50 transition-colors group"
+                    className="flex w-full items-center justify-between rounded-xl p-2 text-left hover:bg-slate-50 active:scale-[0.98] transition-all group"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="size-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
@@ -743,107 +743,117 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
           </div>
 
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none snap-x">
-            {qa.selectedCards.map((card) => (
-              <div
-                key={card.id}
-                className="w-52 shrink-0 snap-start rounded-2xl border border-slate-200 bg-white p-3 shadow-xs flex flex-col justify-between transition-all"
-              >
-                <div>
-                  {/* 동작가이드 썸네일 (무한루프 재생) */}
-                  <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-900 mb-2.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={card.gifUrl || card.posterUrl}
-                      alt={card.koreanOnlyName}
-                      className="size-full object-cover"
-                    />
+            <AnimatePresence mode="popLayout">
+              {qa.selectedCards.map((card) => (
+                <motion.div
+                  key={card.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9, x: 20 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, x: -20 }}
+                  transition={{ type: "spring", damping: 26, stiffness: 320, mass: 0.8 }}
+                  className="w-52 shrink-0 snap-start rounded-2xl border border-slate-200 bg-white p-3 shadow-xs flex flex-col justify-between transition-shadow will-change-transform"
+                >
+                  <div>
+                    {/* 동작가이드 썸네일 (무한루프 재생) */}
+                    <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-900 mb-2.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={card.gifUrl || card.posterUrl}
+                        alt={card.koreanOnlyName}
+                        className="size-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => qa.removeCard(card.id)}
+                        className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors active:scale-90"
+                        aria-label="삭제"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+
+                    {/* 운동명 */}
+                    <p className="font-black text-sm text-slate-900 truncate">
+                      {card.koreanOnlyName}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                      {card.reps} · {card.cue}
+                    </p>
+                  </div>
+
+                  {/* 세트 조절 (왼쪽 -, 오른쪽 +) */}
+                  <div className="mt-2.5 flex items-center justify-between rounded-xl bg-slate-100 p-1">
                     <button
                       type="button"
-                      onClick={() => qa.removeCard(card.id)}
-                      className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
-                      aria-label="삭제"
+                      onClick={() => qa.updateCardSets(card.id, -1)}
+                      disabled={card.sets <= 1}
+                      className="flex size-7 items-center justify-center rounded-lg bg-white text-slate-800 shadow-xs font-black text-sm disabled:opacity-30 active:scale-85 transition-transform duration-100 ease-out"
+                      aria-label="세트 감소"
                     >
-                      <X className="size-3.5" />
+                      <Minus className="size-3.5 stroke-[2.5]" />
+                    </button>
+                    <span className="text-xs font-black text-slate-900 tabular-nums">
+                      {card.sets}세트
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => qa.updateCardSets(card.id, 1)}
+                      disabled={card.sets >= 10}
+                      className="flex size-7 items-center justify-center rounded-lg bg-white text-slate-800 shadow-xs font-black text-sm disabled:opacity-30 active:scale-85 transition-transform duration-100 ease-out"
+                      aria-label="세트 증가"
+                    >
+                      <Plus className="size-3.5 stroke-[2.5]" />
                     </button>
                   </div>
 
-                  {/* 운동명 */}
-                  <p className="font-black text-sm text-slate-900 truncate">
-                    {card.koreanOnlyName}
-                  </p>
-                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                    {card.reps} · {card.cue}
-                  </p>
-                </div>
-
-                {/* 세트 조절 (왼쪽 -, 오른쪽 +) */}
-                <div className="mt-2.5 flex items-center justify-between rounded-xl bg-slate-100 p-1">
-                  <button
-                    type="button"
-                    onClick={() => qa.updateCardSets(card.id, -1)}
-                    disabled={card.sets <= 1}
-                    className="flex size-7 items-center justify-center rounded-lg bg-white text-slate-800 shadow-xs font-black text-sm disabled:opacity-30 active:scale-95"
-                    aria-label="세트 감소"
-                  >
-                    <Minus className="size-3.5 stroke-[2.5]" />
-                  </button>
-                  <span className="text-xs font-black text-slate-900 tabular-nums">
-                    {card.sets}세트
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => qa.updateCardSets(card.id, 1)}
-                    disabled={card.sets >= 10}
-                    className="flex size-7 items-center justify-center rounded-lg bg-white text-slate-800 shadow-xs font-black text-sm disabled:opacity-30 active:scale-95"
-                    aria-label="세트 증가"
-                  >
-                    <Plus className="size-3.5 stroke-[2.5]" />
-                  </button>
-                </div>
-
-                {/* 운동별 맞춤 코칭 태그 (Pacefit 연동) */}
-                <div className="mt-2 pt-2 border-t border-slate-100">
-                  <p className="text-[10px] font-bold text-slate-400 mb-1">코칭 포인트</p>
-                  <div className="flex flex-wrap gap-1">
-                    {card.availableCoachingTags.map((tag) => {
-                      const active = card.selectedCoachingTags.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => qa.toggleCardTag(card.id, tag)}
-                          className={cn(
-                            "rounded-md px-1.5 py-0.5 text-[10px] font-bold transition-all",
-                            active
-                              ? "bg-amber-400 text-slate-900 border border-slate-900 shadow-2xs"
-                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                          )}
-                        >
-                          #{tag}
-                        </button>
-                      );
-                    })}
+                  {/* 운동별 맞춤 코칭 태그 (Pacefit 연동) */}
+                  <div className="mt-2 pt-2 border-t border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 mb-1">코칭 포인트</p>
+                    <div className="flex flex-wrap gap-1">
+                      {card.availableCoachingTags.map((tag) => {
+                        const active = card.selectedCoachingTags.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => qa.toggleCardTag(card.id, tag)}
+                            className={cn(
+                              "rounded-md px-1.5 py-0.5 text-[10px] font-bold active:scale-90 transition-all duration-100",
+                              active
+                                ? "bg-amber-400 text-slate-900 border border-slate-900 shadow-2xs"
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            )}
+                          >
+                            #{tag}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                </motion.div>
+              ))}
+            </AnimatePresence>
 
             {/* 빈 슬롯 카드 */}
             {qa.selectedCards.length < 3 && (
-              <div
+              <motion.div
+                layout
+                whileTap={{ scale: 0.96 }}
+                transition={{ type: "spring", damping: 25, stiffness: 400 }}
                 onClick={() => {
                   qa.setIsSearching(true);
                   const input = document.querySelector('input[placeholder*="운동 검색"]') as HTMLInputElement;
                   input?.focus();
                 }}
-                className="w-40 shrink-0 snap-start cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-4 flex flex-col items-center justify-center text-center text-slate-400 gap-1.5 hover:bg-slate-100 hover:border-slate-300 transition-all"
+                className="w-40 shrink-0 snap-start cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/70 p-4 flex flex-col items-center justify-center text-center text-slate-400 gap-1.5 hover:bg-slate-100 hover:border-slate-300 transition-colors will-change-transform"
               >
                 <div className="flex size-8 items-center justify-center rounded-full bg-white shadow-xs">
                   <Plus className="size-4 text-slate-600" />
                 </div>
                 <span className="text-xs font-bold text-slate-600 mt-1">동작 추가</span>
                 <span className="text-[10px] text-slate-400">최대 3개</span>
-              </div>
+              </motion.div>
             )}
           </div>
         </section>

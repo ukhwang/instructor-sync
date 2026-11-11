@@ -46,9 +46,9 @@ export function TrainerNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`text-sm font-bold px-3 py-2 rounded-xl whitespace-nowrap transition-all ${
+                className={`text-sm font-bold px-3 py-2 rounded-xl whitespace-nowrap transition-all duration-150 active:scale-95 will-change-transform ${
                   isActive
-                    ? "bg-[var(--ui-accent-light)] text-[var(--ui-accent)]"
+                    ? "bg-[var(--ui-accent-light)] text-[var(--ui-accent)] shadow-2xs"
                     : "text-neutral-600 hover:bg-[var(--ui-accent-light)] hover:text-[var(--ui-accent)]"
                 }`}
               >
@@ -61,7 +61,7 @@ export function TrainerNav() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleSignOut}
-            className="text-xs font-bold px-3 py-2 rounded-xl border border-[var(--ui-border)] bg-white hover:bg-[var(--ui-accent-light)]"
+            className="text-xs font-bold px-3 py-2 rounded-xl border border-[var(--ui-border)] bg-white hover:bg-[var(--ui-accent-light)] active:scale-95 transition-all duration-150 will-change-transform"
           >
             로그아웃
           </button>
