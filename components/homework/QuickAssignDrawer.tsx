@@ -327,7 +327,6 @@ export function useQuickAssign({
       setSelectedCards([hip90, hipFlexor].filter(Boolean) as SelectedCardItem[]);
     }
   }, []);
-  }, []);
 
   const selectMember = useCallback((id: string) => {
     vibrate(8);
