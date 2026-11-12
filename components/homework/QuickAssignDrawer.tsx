@@ -49,52 +49,19 @@ function buildCardFromRehabId(id: string, sets?: number): SelectedCardItem | nul
 }
 
 /* ────────────────────────────────────────────────────────────
- * 1. Presets & Zod Schemas
+ * 1. Presets & Zod Schemas (lib/homework-schemas 에서 일원화)
  * ──────────────────────────────────────────────────────────── */
 
-export const ROUTINE_PRESET_IDS = [
-  "spine-pelvis-5",
-  "round-shoulder-3",
-  "hip-mobility-4",
-  "repeat-last",
-] as const;
-export type RoutinePresetId = (typeof ROUTINE_PRESET_IDS)[number];
-
-export const customExerciseItemSchema = z.object({
-  name: z.string().min(1),
-  sets: z.number().int().min(1),
-  reps: z.string().min(1),
-  cue: z.string(),
-  coachingTags: z.array(z.string()).optional(),
-  restSec: z.number().int().optional(),
-  gifUrl: z.string().optional(),
-  posterUrl: z.string().optional(),
-});
-export type CustomExerciseItem = z.infer<typeof customExerciseItemSchema>;
-
-export const assignHomeworkInputSchema = z
-  .object({
-    memberId: z.string().min(1),
-    presetId: z.enum(ROUTINE_PRESET_IDS).nullable().optional(),
-    repeatFromHomeworkId: z.string().min(1).nullable().optional(),
-    why: z.string().optional(),
-    tags: z.array(z.string()).optional(),
-    customItems: z.array(customExerciseItemSchema).optional(),
-  })
-  .refine(
-    (value) => (value.customItems && value.customItems.length > 0) || Boolean(value.presetId),
-    {
-      message: "루틴 프리셋을 고르거나 운동을 1개 이상 추가해주세요",
-      path: ["presetId"],
-    }
-  );
-export type AssignHomeworkInput = z.infer<typeof assignHomeworkInputSchema>;
-
-export const scheduleNextSessionInputSchema = z.object({
-  memberId: z.string().min(1),
-  startsAt: z.string().datetime({ offset: true }),
-});
-export type ScheduleNextSessionInput = z.infer<typeof scheduleNextSessionInputSchema>;
+export {
+  ROUTINE_PRESET_IDS,
+  type RoutinePresetId,
+  customExerciseItemSchema,
+  type CustomExerciseItem,
+  assignHomeworkInputSchema,
+  type AssignHomeworkInput,
+  scheduleNextSessionInputSchema,
+  type ScheduleNextSessionInput,
+} from "@/lib/homework-schemas";
 
 /* ────────────────────────────────────────────────────────────
  * 2. Props & Types

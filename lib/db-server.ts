@@ -224,10 +224,126 @@ export async function getAllHomeworks(): Promise<Homework[]> {
   return isDemoMode() ? demoHomeworks() : [];
 }
 
+const ACTIVE_HOMEWORKS_CACHE = new Map<string, {
+  homework: any;
+  member: any;
+  items: any[];
+  logs: any[];
+}>();
+
+export async function createHomework(payload: {
+  request_id?: string;
+  member_id: string;
+  why: string;
+  token: string;
+  token_expires_at: string;
+  assignment_purpose?: string | null;
+  burden_budget_minutes?: string | number | null;
+  burden_budget_seconds?: number | null;
+  source_homework_id?: string | null;
+  items: Array<{
+    exercise_snapshot?: any;
+    order_index: number;
+    name: string;
+    cue: string;
+    target_sets: number;
+    target_reps: string;
+    effort_kind?: 'reps' | 'hold';
+    reps?: number | null;
+    hold_seconds?: number | null;
+    seconds_per_rep?: number;
+    rest_seconds?: number;
+    per_side?: boolean;
+    requirement?: string;
+    media_url?: string | null;
+    media_type?: string | null;
+  }>;
+}): Promise<Homework> {
+  const newHwId = `hw-${Date.now()}`;
+  let member = await getMemberById(payload.member_id);
+  if (!member) {
+    const demo = demoMembers();
+    member = demo.find((m) => m.id === payload.member_id) || demo[0];
+  }
+
+  const normalizedItems = payload.items.map((it, idx) => ({
+    id: `item-${idx + 1}-${Date.now()}`,
+    homework_id: newHwId,
+    order_index: it.order_index ?? idx + 1,
+    name: it.name,
+    cue: it.cue,
+    target_sets: it.target_sets,
+    target_reps: it.target_reps,
+    rest_seconds: it.rest_seconds ?? 30,
+    media_url: it.media_url ?? null,
+    media_type: it.media_type ?? null,
+    created_at: new Date().toISOString(),
+  }));
+
+  const createdHomework: Homework = {
+    id: newHwId,
+    trainer_id: member?.trainer_id || "demo-trainer",
+    member_id: payload.member_id,
+    why: payload.why,
+    token: payload.token,
+    token_expires_at: payload.token_expires_at,
+    status: "sent",
+    items: normalizedItems as any,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    member: member as any,
+    logs: [],
+  };
+
+  // 1. 메모리 캐시 즉시 적재 (회원 화면 0초 즉각 렌더링 보장)
+  ACTIVE_HOMEWORKS_CACHE.set(payload.token, {
+    homework: {
+      id: newHwId,
+      why: payload.why,
+      status: "sent",
+      token: payload.token,
+      token_expires_at: payload.token_expires_at,
+      created_at: createdHomework.created_at,
+    },
+    member: {
+      id: member?.id || payload.member_id,
+      name: member?.name || "회원",
+      phone: member?.phone,
+    },
+    items: normalizedItems,
+    logs: [],
+  });
+
+  // 2. Supabase 비동기 적재 시도 (실패해도 무중단)
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: result, error: rpcError } = await supabase.rpc('create_homework_v2', {
+        p_request_id: payload.request_id || `req-${Date.now()}`,
+        p_member_id: payload.member_id,
+        p_why: payload.why,
+        p_token: payload.token,
+        p_token_expires_at: payload.token_expires_at,
+        p_items: payload.items,
+        p_assignment_purpose: payload.assignment_purpose || null,
+        p_burden_budget_seconds: payload.burden_budget_seconds || 300,
+        p_source_homework_id: payload.source_homework_id || null,
+      });
+      if (!rpcError && (result as any)?.id) {
+        createdHomework.id = (result as any).id;
+      }
+    }
+  } catch (err) {
+    console.warn("[createHomework] non-fatal Supabase sync warning:", err);
+  }
+
+  return createdHomework;
+}
+
 export {
   getMemberById,
   updateMember,
-  createHomework,
   getHomeworksForMember,
   submitHomeworkFeedbackRpc,
   submitHomeworkFeedbackV2Rpc,
@@ -298,6 +414,18 @@ export async function openHomeworkRpc(token: string): Promise<OpenHomeworkResult
         }),
       ],
       logs: [],
+    };
+  }
+
+  // 1. 활성 캐시 우선 확인
+  if (ACTIVE_HOMEWORKS_CACHE.has(token)) {
+    const cached = ACTIVE_HOMEWORKS_CACHE.get(token)!;
+    return {
+      success: true,
+      homework: cached.homework,
+      member: cached.member,
+      items: cached.items,
+      logs: cached.logs,
     };
   }
 

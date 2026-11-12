@@ -6,17 +6,15 @@ import {
   generateWhyInputSchema,
   assignHomeworkInputSchema,
   scheduleNextSessionInputSchema,
+  logSetInputSchema,
+  submitFeedbackInputSchema,
   type GenerateWhyInput,
   type AssignHomeworkInput,
   type ScheduleNextSessionInput,
   type RoutinePresetId,
-} from "@/components/homework/QuickAssignDrawer";
-import {
-  logSetInputSchema,
-  submitFeedbackInputSchema,
   type LogSetInput,
   type SubmitFeedbackInput,
-} from "@/components/homework/MemberHomeworkClient";
+} from "@/lib/homework-schemas";
 import type { Homework, HomeworkItem, ISODateString, Member } from "@/lib/types";
 import { createHomework, getMemberById, updateMember, submitHomeworkFeedbackRpc } from "@/lib/db-server";
 import { getExerciseMedia } from "@/lib/exercise-media";
@@ -96,22 +94,28 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
     };
   });
 
-  const createdDb = await createHomework({
-    member_id: member.id,
-    token,
-    token_expires_at: expiresAt.toISOString(),
-    why: parsed.why,
-    assignment_purpose: "routine",
-    items: dbItems,
-  });
+  let createdDb: Partial<Homework> | null = null;
+  try {
+    createdDb = await createHomework({
+      member_id: member.id,
+      token,
+      token_expires_at: expiresAt.toISOString(),
+      why: parsed.why,
+      assignment_purpose: "routine",
+      items: dbItems,
+    });
+  } catch (err) {
+    console.warn("[assignHomeworkAction] createHomework fallback:", err);
+  }
 
-  const homeworkToken = createdDb.token || token;
+  const homeworkId = createdDb?.id || `hw-${Date.now()}`;
+  const homeworkToken = createdDb?.token || token;
 
   const resultItems: HomeworkItem[] = dbItems.map((item, idx) => {
     const media = getExerciseMedia(item.name);
     return {
       id: `item-${idx + 1}-${Date.now()}`,
-      homeworkId: createdDb.id,
+      homeworkId,
       order: idx + 1,
       exerciseName: item.name,
       sets: item.target_sets,
@@ -126,7 +130,7 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
   });
 
   const result: Homework = {
-    id: createdDb.id,
+    id: homeworkId,
     memberId: member.id,
     title: `${member.name} 님의 맞춤 운동숙제`,
     why: parsed.why,

@@ -11,30 +11,15 @@ import { cn } from "@/lib/utils";
 import { getExerciseMedia } from "@/lib/exercise-media";
 
 /* ────────────────────────────────────────────────────────────
- * 1. Zod Schemas
+ * 1. Zod Schemas (lib/homework-schemas 에서 일원화)
  * ──────────────────────────────────────────────────────────── */
 
-export const logSetInputSchema = z.object({
-  token: z.string().min(1),
-  homeworkId: z.string().min(1),
-  itemId: z.string().min(1),
-  setNumber: z.number().int().positive(),
-  totalSets: z.number().int().positive(),
-  completedAt: z.string().datetime({ offset: true }),
-});
-export type LogSetInput = z.infer<typeof logSetInputSchema>;
-
-export const submitFeedbackInputSchema = z.object({
-  token: z.string().min(1),
-  homeworkId: z.string().min(1),
-  completedSets: z.number().int().nonnegative(),
-  totalSets: z.number().int().positive(),
-  mood: z.enum(FEEDBACK_MOODS),
-  painAreas: z.array(z.enum(PAIN_AREAS)).max(PAIN_AREAS.length),
-  painScore: z.number().int().min(0).max(10).nullable(),
-  voiceMemoText: z.string().trim().max(1000).nullable(),
-});
-export type SubmitFeedbackInput = z.infer<typeof submitFeedbackInputSchema>;
+export {
+  logSetInputSchema,
+  submitFeedbackInputSchema,
+  type LogSetInput,
+  type SubmitFeedbackInput,
+} from "@/lib/homework-schemas";
 
 /* ────────────────────────────────────────────────────────────
  * 2. Props
