@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { getMembers } from "@/lib/db";
 import { Member } from "@/lib/types";
 import { QuickAssignDrawer } from "@/components/homework/QuickAssignDrawer";
-import { generateWhyAction, assignHomeworkAction, scheduleNextSessionAction } from "@/app/actions/homework";
+import { generateWhyAction, assignHomeworkAction } from "@/app/actions/homework";
 
 function HomeworkNewPageContent() {
   const router = useRouter();
@@ -50,7 +50,6 @@ function HomeworkNewPageContent() {
         lastHomeworkByMemberId={{}}
         onGenerateWhy={generateWhyAction}
         onAssign={assignHomeworkAction}
-        onScheduleNextSession={scheduleNextSessionAction}
       />
     </div>
   );

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Zap } from "lucide-react";
-import { QuickAssignDrawer, type SuggestedNextSession } from "./QuickAssignDrawer";
-import { generateWhyAction, assignHomeworkAction, scheduleNextSessionAction } from "@/app/actions/homework";
+import { QuickAssignDrawer, type LessonContext } from "./QuickAssignDrawer";
+import { generateWhyAction, assignHomeworkAction } from "@/app/actions/homework";
 import type { Homework, Member } from "@/lib/types";
 
 interface QuickAssignTriggerProps {
@@ -12,7 +12,7 @@ interface QuickAssignTriggerProps {
   buttonLabel?: string;
   buttonClassName?: string;
   lastHomeworkByMemberId?: Partial<Record<string, Homework>>;
-  suggestedNextSession?: SuggestedNextSession | null;
+  lesson?: LessonContext | null;
   className?: string;
   onAssigned?: (homework: Homework) => void;
 }
@@ -23,7 +23,7 @@ export function QuickAssignTrigger({
   buttonLabel = "⚡ 15초 빠른 숙제 출제",
   buttonClassName = "",
   lastHomeworkByMemberId = {},
-  suggestedNextSession = null,
+  lesson = null,
   className = "",
   onAssigned,
 }: QuickAssignTriggerProps) {
@@ -49,10 +49,9 @@ export function QuickAssignTrigger({
         members={members}
         prefilledMember={prefilledMember}
         lastHomeworkByMemberId={lastHomeworkByMemberId}
-        suggestedNextSession={suggestedNextSession}
+        lesson={lesson}
         onGenerateWhy={generateWhyAction}
         onAssign={assignHomeworkAction}
-        onScheduleNextSession={scheduleNextSessionAction}
         onAssigned={onAssigned}
       />
     </>

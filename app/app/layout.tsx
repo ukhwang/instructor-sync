@@ -11,7 +11,7 @@ export default function TrainerAppLayout({
   return (
     <div className="min-h-screen flex flex-col bg-[#f7f7f5] text-[#111111]">
       <TrainerNav />
-      <main className="flex-1 brutalist-container py-6 md:py-8">
+      <main className="w-full flex-1 brutalist-container py-6 md:py-8">
         <MotionPageTransition>{children}</MotionPageTransition>
       </main>
       <footer className="border-t-2 border-black bg-white py-4 mt-12">

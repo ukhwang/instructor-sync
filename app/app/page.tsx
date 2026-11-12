@@ -5,25 +5,36 @@ import { buildCareQueue, CARE_QUEUE_LABELS } from "@/lib/care-queue";
 import { QuickAssignTrigger } from "@/components/homework/QuickAssignTrigger";
 import { getMemberBriefing } from "@/lib/briefing/service";
 import { SessionBriefingCard } from "@/components/briefing/SessionBriefingCard";
+import { getTodayLessons } from "@/lib/schedule-server";
+import type { LessonBlock } from "@/lib/schedule-schemas";
+import { BADGE_META, formatTime } from "@/lib/schedule-display";
 
 export const dynamic = "force-dynamic";
+
+function pickNextLesson(lessons: LessonBlock[]): LessonBlock | null {
+  const nowMs = Date.now();
+  return lessons.find((lesson) => lesson.status === "scheduled" && Date.parse(lesson.endsAt) > nowMs) ?? null;
+}
 
 export default async function TrainerDashboardPage() {
   // These authenticated Supabase reads are independent. Starting them together
   // removes one network round trip from the dashboard's server-render time.
-  const [members, homeworks] = await Promise.all([
+  // 스케줄 조회 실패(마이그레이션 미적용 등)는 대시보드를 막지 않는다.
+  const [members, homeworks, todayLessons] = await Promise.all([
     getMembers(),
     getAllHomeworks(),
+    getTodayLessons().catch((): LessonBlock[] => []),
   ]);
   const careQueue = buildCareQueue(members, homeworks);
 
-  // Priority Briefing for today's upcoming session
-  const primaryMember = careQueue[0]?.member || members[0];
-  const primaryBriefing = primaryMember ? await getMemberBriefing(primaryMember.id) : null;
+  // 3초 브리핑 대상: 오늘 아직 끝나지 않은 다음 수업 회원 → 없으면 케어 큐 1순위
+  const nextLesson = pickNextLesson(todayLessons);
+  const primaryMemberId = nextLesson?.memberId ?? careQueue[0]?.member?.id ?? members[0]?.id ?? null;
+  const primaryBriefing = primaryMemberId ? await getMemberBriefing(primaryMemberId) : null;
 
   // Calculate Funnel Metrics
   const totalMembers = members.length;
-  const expiringMembers = members.filter((m) => m.package_remaining <= 4);
+  const expiringMembers = members.filter((m) => (m.package_remaining ?? 0) <= 4);
   const totalHomeworks = homeworks.length;
   
   const openedHomeworks = homeworks.filter(
@@ -62,12 +73,58 @@ export default async function TrainerDashboardPage() {
         </div>
       </div>
 
+      {/* 오늘 수업 (스케줄러) */}
+      <section aria-label="오늘 수업" className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold tracking-tight">오늘 수업 {todayLessons.length > 0 && <span className="text-[var(--ui-accent)]">{todayLessons.length}</span>}</h2>
+          <Link href="/app/schedules" className="text-sm font-bold text-[var(--ui-accent)]">
+            주간 스케줄 →
+          </Link>
+        </div>
+        {todayLessons.length === 0 ? (
+          <Link
+            href="/app/schedules"
+            className="brutalist-box-sm flex min-h-16 items-center justify-center bg-white p-4 text-sm font-semibold text-neutral-600"
+          >
+            오늘 예약된 수업이 없어요. 스케줄에서 빈 시간을 눌러 예약하세요.
+          </Link>
+        ) : (
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {todayLessons.map((lesson) => {
+              const meta = BADGE_META[lesson.badge];
+              const done = lesson.status !== "scheduled";
+              return (
+                <li key={lesson.id}>
+                  <Link
+                    href={`/app/schedules?lesson=${lesson.id}`}
+                    className={`brutalist-box-sm flex min-h-16 items-center gap-3 bg-white p-3 transition-transform active:scale-[0.98] ${done ? "opacity-60" : ""}`}
+                  >
+                    <span className="font-mono text-sm font-bold tabular-nums">{formatTime(lesson.startsAt)}</span>
+                    <span className={`size-2.5 shrink-0 rounded-full ${meta.dot}`} aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-bold">{lesson.memberName}님</span>
+                      <span className="block truncate text-xs text-neutral-500">{lesson.homeworkSummary}</span>
+                    </span>
+                    {lesson.status === "completed" && <span className="text-xs font-bold text-emerald-600">완료</span>}
+                    {lesson.status === "no_show" && <span className="text-xs font-bold text-neutral-500">노쇼</span>}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {/* 3초 AI 수업 브리핑 카드 */}
       {primaryBriefing && (
         <section aria-label="수업 전 3초 AI 브리핑" className="space-y-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold tracking-tight">수업 전 3초 AI 브리핑</h2>
-            <span className="text-xs font-mono text-neutral-500">수업 10분 전 자동 생성</span>
+            <h2 className="text-xl font-bold tracking-tight">
+              {nextLesson ? `${formatTime(nextLesson.startsAt)} 수업 3초 브리핑` : "수업 전 3초 브리핑"}
+            </h2>
+            <span className="text-xs font-mono text-neutral-500">
+              {primaryBriefing.source === "live" ? "회원 기록 기반" : "샘플 데이터"}
+            </span>
           </div>
           <SessionBriefingCard briefing={primaryBriefing} variant="dashboard" />
         </section>
@@ -285,7 +342,7 @@ export default async function TrainerDashboardPage() {
                         {badge.label}
                       </span>
                       <span className="text-xs font-mono text-neutral-500">
-                        {getSeoulDateTimeString(hw.created_at)}
+                        {hw.created_at ? getSeoulDateTimeString(hw.created_at) : ""}
                       </span>
                     </div>
 

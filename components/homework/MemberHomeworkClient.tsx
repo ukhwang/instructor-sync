@@ -2,24 +2,25 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { CheckCircle2, Dumbbell, Loader2, Mic, RotateCcw, Square, WifiOff } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { z } from "zod";
-
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { vibrate } from "@/lib/kakao-share";
 import { FEEDBACK_MOODS, PAIN_AREAS, type FeedbackMood, type Homework, type HomeworkItem, type Member, type PainArea } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getExerciseMedia } from "@/lib/exercise-media";
+import { createRequestId } from "@/lib/homework-assignment";
 
 /* ────────────────────────────────────────────────────────────
  * 1. Zod Schemas (lib/homework-schemas 에서 일원화)
  * ──────────────────────────────────────────────────────────── */
 
-export {
+import {
   logSetInputSchema,
   submitFeedbackInputSchema,
   type LogSetInput,
   type SubmitFeedbackInput,
 } from "@/lib/homework-schemas";
+
+export { logSetInputSchema, submitFeedbackInputSchema, type LogSetInput, type SubmitFeedbackInput };
 
 /* ────────────────────────────────────────────────────────────
  * 2. Props
@@ -30,11 +31,13 @@ export interface MemberHomeworkClientProps {
   member: Pick<Member, "id" | "name">;
   /** Server Action: 세트 완료 이벤트 기록 */
   onLogSet: (input: LogSetInput) => Promise<void>;
-  /** Server Action: 최종 피드백 제출 */
-  onSubmitFeedback: (input: SubmitFeedbackInput) => Promise<void>;
-  /** Server Action → Edge Function(STT). 녹음 Blob을 텍스트로 변환 */
-  onTranscribe: (audio: Blob) => Promise<string>;
+  /** Server Action: 최종 피드백 제출 (실패는 값으로 돌려받는다) */
+  onSubmitFeedback: (input: SubmitFeedbackInput) => Promise<SubmitFeedbackOutcome>;
 }
+
+export type SubmitFeedbackOutcome =
+  | { ok: true; alreadySubmitted: boolean }
+  | { ok: false; message: string; retryable: boolean };
 
 /* ────────────────────────────────────────────────────────────
  * 3. Hooks
@@ -54,7 +57,7 @@ interface SessionState {
 }
 
 function sumSets(items: HomeworkItem[]): number {
-  return items.reduce((acc, item) => acc + Math.max(1, item.sets), 0);
+  return items.reduce((acc, item) => acc + Math.max(1, item.sets ?? 1), 0);
 }
 
 /** 오프라인·일시 오류에 대비한 세트 로그 큐. 낙관적 진행 + 순차 재시도 */
@@ -106,7 +109,7 @@ function useSetLogQueue(onLogSet: (input: LogSetInput) => Promise<void>) {
 
 export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetInput) => Promise<void>) {
   const items = useMemo<HomeworkItem[]>(
-    () => [...homework.items].sort((a, b) => a.order - b.order),
+    () => [...(homework.items ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [homework.items],
   );
   const totalSets = useMemo<number>(() => sumSets(items), [items]);
@@ -131,7 +134,7 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
   const completeSet = useCallback(() => {
     if (state.stage !== "workout" || state.phase.kind !== "exercise" || !currentItem) return;
 
-    const setsForItem = Math.max(1, currentItem.sets);
+    const setsForItem = Math.max(1, currentItem.sets ?? 1);
     const setNumber = state.setIndex + 1;
     vibrate(25);
 
@@ -145,7 +148,8 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
     });
 
     if (setNumber < setsForItem) {
-      const durationSec = currentItem.restSec > 0 ? currentItem.restSec : DEFAULT_REST_SEC;
+      const restSec = currentItem.restSec ?? 0;
+      const durationSec = restSec > 0 ? restSec : DEFAULT_REST_SEC;
       const startedAt = Date.now();
       setNow(startedAt);
       setState((prev) => ({
@@ -194,10 +198,17 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
   const restProgress =
     state.phase.kind === "rest" ? Math.min(1, Math.max(0, 1 - (state.phase.endsAt - now) / (state.phase.durationSec * 1000))) : 0;
 
+  /** 모든 세트를 끝낸 동작 id. 서버가 이 목록으로 완료/일부/못함을 판정한다. */
+  const completedItemIds = useMemo<string[]>(() => {
+    const done = state.stage === "workout" ? items.slice(0, state.index) : items;
+    return done.map((item) => item.id);
+  }, [items, state.index, state.stage]);
+
   return {
     items,
     totalSets,
     completedSets,
+    completedItemIds,
     state,
     currentItem,
     completeSet,
@@ -210,24 +221,76 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
   };
 }
 
-type VoiceStatus = "idle" | "recording" | "transcribing" | "ready" | "error" | "unsupported";
-const MAX_RECORDING_SEC = 60;
+/* ── 음성 메모: 브라우저 내장 음성 인식(Web Speech API) ──────────────
+ * 서버 전송·외부 AI 호출 없이 기기에서 바로 글자로 바꾼다.
+ * 지원하지 않는 환경(카카오톡 인앱 브라우저 등)은 입력창 + 키보드 마이크로 안내한다.
+ * 인식 결과는 회원이 확인·수정한 뒤에만 제출된다. 고정 문구로 대체하지 않는다. */
 
-function pickAudioMimeType(): string | undefined {
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
-  return candidates.find((type) => MediaRecorder.isTypeSupported(type));
+type VoiceStatus = "idle" | "recording" | "unsupported";
+type ActiveVoiceStatus = Exclude<VoiceStatus, "unsupported">;
+
+const noopSubscribe = () => () => {};
+const MAX_RECORDING_SEC = 60;
+const MAX_MEMO_CHARS = 500;
+
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+interface SpeechRecognitionResultLike {
+  readonly isFinal: boolean;
+  readonly length: number;
+  [index: number]: SpeechRecognitionAlternativeLike;
+}
+interface SpeechRecognitionEventLike {
+  readonly resultIndex: number;
+  readonly results: { readonly length: number; [index: number]: SpeechRecognitionResultLike };
+}
+interface SpeechRecognitionErrorEventLike {
+  readonly error: string;
+}
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognition(): SpeechRecognitionConstructor | null {
+  if (typeof window === "undefined") return null;
+  const candidate = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return candidate.SpeechRecognition ?? candidate.webkitSpeechRecognition ?? null;
 }
 
-export function useVoiceMemo(onTranscribe: (audio: Blob) => Promise<string>) {
-  const [status, setStatus] = useState<VoiceStatus>("idle");
-  const [text, setText] = useState<string>("");
+const SPEECH_ERROR_MESSAGE: Record<string, string> = {
+  "not-allowed": "마이크 사용을 허용해주세요. 아래 칸에 직접 적으셔도 돼요",
+  "service-not-allowed": "이 화면에서는 음성 인식을 쓸 수 없어요. 아래 칸에 적어주세요",
+  "no-speech": "잘 안 들렸어요. 조금 더 크게 다시 말해주세요",
+  "audio-capture": "마이크를 찾을 수 없어요. 아래 칸에 적어주세요",
+  network: "음성 인식 연결이 끊겼어요. 아래 칸에 적어주세요",
+};
+
+export function useVoiceMemo() {
+  // 서버 렌더에서는 "지원"으로 가정하고, 브라우저에서 실제 지원 여부로 맞춘다 (하이드레이션 안전).
+  const supported = useSyncExternalStore(noopSubscribe, () => getSpeechRecognition() !== null, () => true);
+  const [activeStatus, setStatus] = useState<ActiveVoiceStatus>("idle");
+  const status: VoiceStatus = supported ? activeStatus : "unsupported";
+  const [text, setTextState] = useState<string>("");
+  const [interim, setInterim] = useState<string>("");
   const [elapsedSec, setElapsedSec] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const timerRef = useRef<number | null>(null);
+  const baseTextRef = useRef<string>("");
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -236,87 +299,77 @@ export function useVoiceMemo(onTranscribe: (audio: Blob) => Promise<string>) {
     }
   }, []);
 
-  const releaseStream = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
+  const setText = useCallback((next: string) => {
+    setTextState(next.slice(0, MAX_MEMO_CHARS));
   }, []);
 
   const stop = useCallback(() => {
     clearTimer();
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
+    recognitionRef.current?.stop();
   }, [clearTimer]);
 
-  const start = useCallback(async () => {
-    if (
-      typeof window === "undefined" ||
-      !navigator.mediaDevices ||
-      typeof navigator.mediaDevices.getUserMedia !== "function" ||
-      typeof MediaRecorder === "undefined"
-    ) {
-      setStatus("unsupported");
-      setErrorMessage("이 기기에서는 음성 메모를 쓸 수 없어요");
-      return;
-    }
+  const start = useCallback(() => {
+    const Recognition = getSpeechRecognition();
+    if (!Recognition) return;
 
-    let stream: MediaStream;
+    let recognition: SpeechRecognitionLike;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recognition = new Recognition();
     } catch {
-      setStatus("error");
-      setErrorMessage("마이크 사용을 허용해주세요");
+      setErrorMessage("이 화면에서는 음성 인식을 쓸 수 없어요. 아래 칸에 적어주세요");
       return;
     }
+    recognition.lang = "ko-KR";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    baseTextRef.current = text.trim();
 
-    const mimeType = pickAudioMimeType();
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    streamRef.current = stream;
-    recorderRef.current = recorder;
-    chunksRef.current = [];
-
-    recorder.ondataavailable = (event: BlobEvent) => {
-      if (event.data.size > 0) chunksRef.current.push(event.data);
+    recognition.onresult = (event) => {
+      let finalText = "";
+      let interimText = "";
+      for (let i = 0; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const transcript = result?.[0]?.transcript ?? "";
+        if (result?.isFinal) finalText += transcript;
+        else interimText += transcript;
+      }
+      const joined = [baseTextRef.current, finalText.trim()].filter(Boolean).join(" ");
+      setTextState(joined.slice(0, MAX_MEMO_CHARS));
+      setInterim(interimText.trim());
+    };
+    recognition.onerror = (event) => {
+      if (event.error === "aborted") return;
+      setErrorMessage(SPEECH_ERROR_MESSAGE[event.error] ?? "음성 인식이 멈췄어요. 아래 칸에 적어주셔도 돼요");
+    };
+    recognition.onend = () => {
+      clearTimer();
+      setInterim("");
+      setStatus((prev) => (prev === "recording" ? "idle" : prev));
+      recognitionRef.current = null;
     };
 
-    recorder.onstop = async () => {
-      releaseStream();
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || "audio/webm" });
-      chunksRef.current = [];
-      if (blob.size === 0) {
-        setStatus("error");
-        setErrorMessage("녹음이 되지 않았어요. 다시 눌러주세요");
-        return;
-      }
-      setStatus("transcribing");
-      try {
-        const transcript = (await onTranscribe(blob)).trim();
-        if (!transcript) {
-          setStatus("error");
-          setErrorMessage("잘 안 들렸어요. 조금 더 크게 다시 말해주세요");
-          return;
-        }
-        setText(transcript.slice(0, 1000));
-        setErrorMessage(null);
-        setStatus("ready");
-      } catch {
-        setStatus("error");
-        setErrorMessage("글자로 바꾸지 못했어요. 다시 눌러주세요");
-      }
-    };
+    try {
+      recognition.start();
+    } catch {
+      setErrorMessage("음성 인식을 시작하지 못했어요. 아래 칸에 적어주세요");
+      return;
+    }
+    recognitionRef.current = recognition;
 
     const startedAt = Date.now();
-    recorder.start();
     setElapsedSec(0);
     setErrorMessage(null);
     setStatus("recording");
     vibrate(20);
-
     timerRef.current = window.setInterval(() => {
       const seconds = Math.floor((Date.now() - startedAt) / 1000);
       setElapsedSec(seconds);
-      if (seconds >= MAX_RECORDING_SEC) stop();
+      if (seconds >= MAX_RECORDING_SEC) {
+        clearTimer();
+        recognitionRef.current?.stop();
+      }
     }, 250);
-  }, [onTranscribe, releaseStream, stop]);
+  }, [clearTimer, text]);
 
   const toggle = useCallback(() => {
     if (status === "recording") {
@@ -324,29 +377,31 @@ export function useVoiceMemo(onTranscribe: (audio: Blob) => Promise<string>) {
       stop();
       return;
     }
-    if (status === "transcribing") return;
-    void start();
+    if (status === "unsupported") return;
+    start();
   }, [start, status, stop]);
 
   const reset = useCallback(() => {
-    setText("");
-    setStatus("idle");
+    recognitionRef.current?.abort();
+    clearTimer();
+    setTextState("");
+    setInterim("");
     setErrorMessage(null);
-  }, []);
+    setStatus("idle");
+  }, [clearTimer]);
 
   useEffect(() => {
     return () => {
       clearTimer();
-      const recorder = recorderRef.current;
-      if (recorder && recorder.state !== "inactive") {
-        recorder.onstop = null;
-        recorder.stop();
+      const recognition = recognitionRef.current;
+      if (recognition) {
+        recognition.onend = null;
+        recognition.abort();
       }
-      releaseStream();
     };
-  }, [clearTimer, releaseStream]);
+  }, [clearTimer]);
 
-  return { status, text, elapsedSec, errorMessage, toggle, reset };
+  return { status, text, interim, setText, elapsedSec, errorMessage, toggle, reset };
 }
 
 export function useFeedbackForm() {
@@ -397,10 +452,11 @@ export function MemberHomeworkClient({
   member,
   onLogSet,
   onSubmitFeedback,
-  onTranscribe,
 }: MemberHomeworkClientProps) {
   const session = useHomeworkSession(homework, onLogSet);
-  const voice = useVoiceMemo(onTranscribe);
+  const voice = useVoiceMemo();
+  // 이 화면 진입 1회당 고정 → 네트워크 재시도가 중복 제출이 되지 않는다.
+  const [requestId] = useState<string>(() => createRequestId());
   const feedback = useFeedbackForm();
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -412,6 +468,8 @@ export function MemberHomeworkClient({
     const parsed = submitFeedbackInputSchema.safeParse({
       token: homework.token,
       homeworkId: homework.id,
+      requestId,
+      completedItemIds: session.completedItemIds,
       completedSets: session.completedSets,
       totalSets: Math.max(1, session.totalSets),
       mood: feedback.mood,
@@ -428,7 +486,11 @@ export function MemberHomeworkClient({
     setSubmitError(null);
     try {
       await session.flushLogs();
-      await onSubmitFeedback(parsed.data);
+      const outcome = await onSubmitFeedback(parsed.data);
+      if (!outcome.ok) {
+        setSubmitError(outcome.message);
+        return;
+      }
       vibrate([40, 50, 120]);
       session.finish();
     } catch {
@@ -677,7 +739,7 @@ export function MemberHomeworkClient({
 
 function ctaLabel(item: HomeworkItem, setIndex: number, isLastItem: boolean): string {
   const setNumber = setIndex + 1;
-  const sets = Math.max(1, item.sets);
+  const sets = Math.max(1, item.sets ?? 1);
   if (setNumber < sets) return `${setNumber}세트 완료! 쉬기`;
   return isLastItem ? `${setNumber}세트 완료! 마무리` : `${setNumber}세트 완료! 다음 운동`;
 }
@@ -693,9 +755,9 @@ function ExerciseCard({
   total: number;
   doneSets: number;
 }) {
-  const sets = Math.max(1, item.sets);
+  const sets = Math.max(1, item.sets ?? 1);
   const amount =
-    item.reps !== null ? `${item.reps}회` : item.durationSec !== null ? `${item.durationSec}초` : null;
+    item.reps != null ? `${item.reps}회` : item.durationSec != null ? `${item.durationSec}초` : null;
 
   return (
     <div>
@@ -728,11 +790,14 @@ function ExerciseCard({
 
 function ExerciseMedia({ item }: { item: HomeworkItem }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  // 동작이 바뀌면 오류 상태가 자동 초기화되도록 "어느 미디어에서 실패했는지"를 기억한다.
+  const [failedSource, setFailedSource] = useState<string | null>(null);
 
   // item.mediaUrl이 없더라도 클라이언트에서 운동명 기반 GitHub 오픈소스 미디어 자동 폴백
-  const fallbackMedia = item.mediaUrl ? null : getExerciseMedia(item.exerciseName);
+  const fallbackMedia = item.mediaUrl ? null : getExerciseMedia(item.exerciseName ?? "");
   const mediaUrl = item.mediaUrl || fallbackMedia?.video || fallbackMedia?.animatedFallback || fallbackMedia?.poster;
+  const mediaSourceKey = `${item.id}|${mediaUrl ?? ""}`;
+  const loadError = failedSource === mediaSourceKey;
   const isVideo = Boolean(
     !loadError &&
       mediaUrl &&
@@ -743,7 +808,6 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
       mediaUrl &&
       !isVideo &&
       (item.mediaType === "image" ||
-        item.mediaType === "gif" ||
         mediaUrl.endsWith(".gif") ||
         mediaUrl.endsWith(".jpg") ||
         mediaUrl.endsWith(".png") ||
@@ -752,10 +816,6 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
         mediaUrl.includes("jsdelivr"))
   );
   const posterUrl = item.posterUrl || fallbackMedia?.poster;
-
-  useEffect(() => {
-    setLoadError(false);
-  }, [item.id, mediaUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -783,7 +843,7 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
           disablePictureInPicture
           className="h-full w-full object-cover"
           aria-label={`${item.exerciseName} 동작 영상`}
-          onError={() => setLoadError(true)}
+          onError={() => setFailedSource(mediaSourceKey)}
         />
       ) : isImageOrGif ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -793,7 +853,7 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
           alt={`${item.exerciseName} 동작 가이드`}
           className="h-full w-full object-cover"
           loading="eager"
-          onError={() => setLoadError(true)}
+          onError={() => setFailedSource(mediaSourceKey)}
         />
       ) : (
         <div className="flex flex-col items-center justify-center gap-2 p-6 text-center text-slate-400">
@@ -905,38 +965,22 @@ function RestCountdown({
 
 function VoiceMemo({ voice }: { voice: ReturnType<typeof useVoiceMemo> }) {
   const recording = voice.status === "recording";
-  const transcribing = voice.status === "transcribing";
-
-  if (voice.status === "unsupported") return null;
+  const supported = voice.status !== "unsupported";
 
   return (
     <div className="mt-8">
       <p className="mb-3 text-xl font-bold">선생님께 하고 싶은 말 (선택)</p>
 
-      {voice.status === "ready" ? (
-        <div className="rounded-2xl bg-slate-50 px-4 py-4">
-          <p className="text-lg leading-relaxed text-slate-800">“{voice.text}”</p>
-          <button
-            type="button"
-            onClick={voice.reset}
-            className="mt-3 flex items-center gap-1.5 text-base font-semibold text-slate-500"
-          >
-            <RotateCcw className="size-4" />
-            다시 말하기
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-4">
+      {supported && (
+        <div className="mb-3 flex items-center gap-4">
           <motion.button
             type="button"
             onClick={voice.toggle}
-            disabled={transcribing}
             whileTap={{ scale: 0.92 }}
-            aria-label={recording ? "녹음 멈추기" : "음성 메모 녹음 시작"}
+            aria-label={recording ? "말하기 멈추기" : "말로 남기기 시작"}
             className={cn(
               "relative flex size-[88px] shrink-0 items-center justify-center rounded-full text-white shadow-lg transition-colors",
               recording ? "bg-rose-500 shadow-rose-500/30" : "bg-slate-900 shadow-slate-900/20",
-              transcribing && "bg-slate-300 shadow-none",
             )}
           >
             {recording && (
@@ -947,27 +991,45 @@ function VoiceMemo({ voice }: { voice: ReturnType<typeof useVoiceMemo> }) {
                 transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}
               />
             )}
-            {transcribing ? (
-              <Loader2 className="relative size-9 animate-spin" />
-            ) : recording ? (
-              <Square className="relative size-8 fill-current" />
-            ) : (
-              <Mic className="relative size-10" />
-            )}
+            {recording ? <Square className="relative size-8 fill-current" /> : <Mic className="relative size-10" />}
           </motion.button>
           <div className="min-w-0">
             <p className="text-lg font-semibold text-slate-800">
-              {recording
-                ? `듣고 있어요… ${voice.elapsedSec}초`
-                : transcribing
-                  ? "글자로 바꾸는 중…"
-                  : "버튼을 누르고 말씀하세요"}
+              {recording ? `듣고 있어요… ${voice.elapsedSec}초` : "버튼을 누르고 말씀하세요"}
             </p>
             <p className={cn("text-base", voice.errorMessage ? "text-rose-600" : "text-slate-500")}>
-              {voice.errorMessage ?? (recording ? "다 말하면 한 번 더 눌러주세요" : "타자 칠 필요 없어요")}
+              {voice.errorMessage ?? (recording ? "다 말하면 한 번 더 눌러주세요" : "말한 내용이 아래 칸에 적혀요")}
             </p>
           </div>
         </div>
+      )}
+
+      <label htmlFor="voice-memo-text" className="sr-only">
+        선생님께 남길 말
+      </label>
+      <textarea
+        id="voice-memo-text"
+        value={voice.interim ? `${voice.text}${voice.text ? " " : ""}${voice.interim}` : voice.text}
+        onChange={(event) => voice.setText(event.target.value)}
+        readOnly={recording}
+        rows={3}
+        maxLength={500}
+        placeholder={
+          supported
+            ? "말한 내용을 확인하고 고칠 수 있어요"
+            : "키보드의 🎤 마이크 버튼을 누르면 말로 입력할 수 있어요"
+        }
+        className="w-full resize-none rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-3 text-lg leading-relaxed text-slate-800 placeholder:text-slate-400 focus:border-[#3182F6] focus:outline-none"
+      />
+      {voice.text && !recording && (
+        <button
+          type="button"
+          onClick={voice.reset}
+          className="mt-2 flex min-h-11 items-center gap-1.5 text-base font-semibold text-slate-500"
+        >
+          <RotateCcw className="size-4" />
+          지우고 다시 하기
+        </button>
       )}
     </div>
   );

@@ -15,6 +15,7 @@ export function TrainerNav() {
 
   const navItems = [
     { label: "홈", href: "/app" },
+    { label: "스케줄", href: "/app/schedules" },
     { label: "회원", href: "/app/members" },
     { label: "상담 큐", href: "/app/renewals" },
   ];

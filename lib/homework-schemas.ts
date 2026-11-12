@@ -24,14 +24,22 @@ export const customExerciseItemSchema = z.object({
 });
 export type CustomExerciseItem = z.infer<typeof customExerciseItemSchema>;
 
+/** create_homework RPC 계약: 숙제 1건당 동작 1~3개 */
+export const MAX_HOMEWORK_ITEMS = 3;
+
 export const assignHomeworkInputSchema = z
   .object({
     memberId: z.string().min(1),
+    /** 스케줄러 원루프: 이 숙제가 출제된 수업 */
+    lessonId: z.uuid().nullable().optional(),
     presetId: z.enum(ROUTINE_PRESET_IDS).nullable().optional(),
     repeatFromHomeworkId: z.string().min(1).nullable().optional(),
     why: z.string().optional(),
     tags: z.array(z.string()).optional(),
-    customItems: z.array(customExerciseItemSchema).optional(),
+    customItems: z
+      .array(customExerciseItemSchema)
+      .max(MAX_HOMEWORK_ITEMS, { message: `운동은 한 번에 최대 ${MAX_HOMEWORK_ITEMS}개까지 보낼 수 있어요` })
+      .optional(),
   })
   .refine(
     (value) => (value.customItems && value.customItems.length > 0) || Boolean(value.presetId),
@@ -48,12 +56,6 @@ export const generateWhyInputSchema = z.object({
 });
 export type GenerateWhyInput = z.infer<typeof generateWhyInputSchema>;
 
-export const scheduleNextSessionInputSchema = z.object({
-  memberId: z.string().min(1),
-  startsAt: z.string().datetime({ offset: true }),
-});
-export type ScheduleNextSessionInput = z.infer<typeof scheduleNextSessionInputSchema>;
-
 export const logSetInputSchema = z.object({
   token: z.string().min(1),
   homeworkId: z.string().min(1),
@@ -64,15 +66,22 @@ export const logSetInputSchema = z.object({
 });
 export type LogSetInput = z.infer<typeof logSetInputSchema>;
 
+/**
+ * 회원 최종 피드백.
+ * - requestId: 화면 1회 진입당 고정 UUID → 네트워크 재시도가 중복 제출이 되지 않음 (RPC 멱등키)
+ * - completedItemIds: 모든 세트를 끝낸 동작 id (서버가 complete/partial/cant 판정)
+ * - 제출 시각은 서버(DB clock)가 기록한다.
+ */
 export const submitFeedbackInputSchema = z.object({
-  token: z.string().min(1),
+  token: z.string().min(1).max(128),
   homeworkId: z.string().min(1),
+  requestId: z.uuid(),
   mood: z.enum(["good", "hard", "pain"]),
-  painAreas: z.array(z.string()),
-  painScore: z.number().nullable(),
+  painAreas: z.array(z.string().min(1).max(10)).max(8),
+  painScore: z.number().int().min(0).max(10).nullable(),
+  completedItemIds: z.array(z.string().min(1)).max(MAX_HOMEWORK_ITEMS),
   completedSets: z.number().int().nonnegative(),
   totalSets: z.number().int().positive(),
-  voiceMemoText: z.string().optional(),
-  submittedAt: z.string(),
+  voiceMemoText: z.string().max(500).nullable().optional(),
 });
 export type SubmitFeedbackInput = z.infer<typeof submitFeedbackInputSchema>;

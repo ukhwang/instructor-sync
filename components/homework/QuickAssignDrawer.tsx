@@ -4,7 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useDragControls, type PanInfo } from "motion/react";
 import {
   Activity,
-  CalendarPlus,
+  CalendarCheck,
   Check,
   Copy,
   ExternalLink,
@@ -12,15 +12,13 @@ import {
   MessageCircle,
   Minus,
   Plus,
-  RotateCcw,
   Search,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { z } from "zod";
 
-import { shareToKakao, vibrate, copyToClipboard, toAbsoluteUrl, type ShareResult } from "@/lib/kakao-share";
-import type { Homework, ISODateString, Member } from "@/lib/types";
+import { vibrate, copyToClipboard, toAbsoluteUrl, type ShareResult } from "@/lib/kakao-share";
+import type { Homework, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   REHAB_EXERCISES,
@@ -52,25 +50,40 @@ function buildCardFromRehabId(id: string, sets?: number): SelectedCardItem | nul
  * 1. Presets & Zod Schemas (lib/homework-schemas 에서 일원화)
  * ──────────────────────────────────────────────────────────── */
 
+import {
+  ROUTINE_PRESET_IDS,
+  MAX_HOMEWORK_ITEMS,
+  customExerciseItemSchema,
+  assignHomeworkInputSchema,
+  type RoutinePresetId,
+  type CustomExerciseItem,
+  type AssignHomeworkInput,
+  type GenerateWhyInput,
+} from "@/lib/homework-schemas";
+
 export {
   ROUTINE_PRESET_IDS,
-  type RoutinePresetId,
   customExerciseItemSchema,
-  type CustomExerciseItem,
   assignHomeworkInputSchema,
+  type RoutinePresetId,
+  type CustomExerciseItem,
   type AssignHomeworkInput,
-  scheduleNextSessionInputSchema,
-  type ScheduleNextSessionInput,
-} from "@/lib/homework-schemas";
+};
 
 /* ────────────────────────────────────────────────────────────
  * 2. Props & Types
  * ──────────────────────────────────────────────────────────── */
 
-export interface SuggestedNextSession {
-  startsAt: ISODateString;
+/** 스케줄러 원루프: 이 숙제를 연결할 수업 */
+export interface LessonContext {
+  lessonId: string;
+  /** 예: "11월 18일(수) 10:00 수업" */
   label: string;
 }
+
+export type AssignHomeworkOutcome =
+  | { ok: true; homework: Homework; lessonLinked: boolean }
+  | { ok: false; message: string };
 
 export interface QuickAssignDrawerProps {
   open: boolean;
@@ -78,10 +91,9 @@ export interface QuickAssignDrawerProps {
   members: Member[];
   prefilledMember?: Member | null;
   lastHomeworkByMemberId: Partial<Record<string, Homework>>;
-  suggestedNextSession?: SuggestedNextSession | null;
-  onGenerateWhy?: (input: any) => Promise<string>;
-  onAssign: (input: AssignHomeworkInput) => Promise<Homework>;
-  onScheduleNextSession: (input: ScheduleNextSessionInput) => Promise<{ nextSessionAt: ISODateString }>;
+  lesson?: LessonContext | null;
+  onGenerateWhy?: (input: GenerateWhyInput) => Promise<string>;
+  onAssign: (input: AssignHomeworkInput) => Promise<AssignHomeworkOutcome>;
   onAssigned?: (homework: Homework) => void;
 }
 
@@ -130,10 +142,8 @@ type UseQuickAssignParams = Omit<QuickAssignDrawerProps, "open" | "onOpenChange"
 export function useQuickAssign({
   members,
   prefilledMember,
-  lastHomeworkByMemberId,
-  suggestedNextSession,
+  lesson,
   onAssign,
-  onScheduleNextSession,
   onAssigned,
 }: UseQuickAssignParams) {
   const [memberId, setMemberId] = useState<string | null>(prefilledMember?.id ?? null);
@@ -152,11 +162,10 @@ export function useQuickAssign({
     if (!db) void import("@/lib/exercises/master-db").then(setDb);
   }, [db]);
 
+  // 바텀시트가 마운트되면(=열리면) 마스터 DB 를 미리 받아 첫 검색 지연을 없앤다.
   useEffect(() => {
-    if (open && !db) {
-      void import("@/lib/exercises/master-db").then(setDb);
-    }
-  }, [open, db]);
+    if (!db) void import("@/lib/exercises/master-db").then(setDb);
+  }, [db]);
 
   // 검색창 상태
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -164,7 +173,6 @@ export function useQuickAssign({
 
   const [assignStatus, setAssignStatus] = useState<AsyncStatus>("idle");
   const [assigned, setAssigned] = useState<Homework | null>(null);
-  const [scheduleStatus, setScheduleStatus] = useState<AsyncStatus>("idle");
   const [notice, setNotice] = useState<Notice | null>(null);
 
   // 카카오톡 원터치 공유 모달 상태 (iOS Safari 비동기 차단 방지)
@@ -200,7 +208,8 @@ export function useQuickAssign({
       gifUrl: item.gifUrl,
       posterUrl: item.posterUrl,
       region: item.category,
-      equipment: item.equipment,
+      // 재활 DB 의 "매트"·"벽/의자" 는 마스터 DB 분류에서 맨몸으로 취급한다.
+      equipment: item.equipment === "밴드" || item.equipment === "폼롤러" ? item.equipment : ("맨몸" as const),
       source: "rehab" as const,
       mediaMatch: "exact" as const,
     }));
@@ -243,8 +252,8 @@ export function useQuickAssign({
   const addExercise = useCallback((item: ExercisePickerItem | RehabExerciseItem) => {
     vibrate(10);
     setSelectedCards((prev) => {
-      if (prev.length >= 3) {
-        setNotice({ tone: "error", message: "숙제는 한 번에 최대 3개까지만 담을 수 있어요" });
+      if (prev.length >= MAX_HOMEWORK_ITEMS) {
+        setNotice({ tone: "error", message: `숙제는 한 번에 최대 ${MAX_HOMEWORK_ITEMS}개까지만 담을 수 있어요` });
         return prev;
       }
       if (prev.some((c) => c.id === item.id)) {
@@ -301,7 +310,6 @@ export function useQuickAssign({
     setIsPickingMember(false);
     setAssigned(null);
     setAssignStatus("idle");
-    setScheduleStatus("idle");
     setNotice(null);
   }, []);
 
@@ -353,6 +361,7 @@ export function useQuickAssign({
 
     const parsed = assignHomeworkInputSchema.safeParse({
       memberId,
+      lessonId: lesson?.lessonId ?? null,
       why: synthesizedWhy,
       tags: allTags.length > 0 ? allTags : ["척추 중립", "코어 잘 잡기"],
       customItems,
@@ -366,7 +375,13 @@ export function useQuickAssign({
     setAssignStatus("loading");
     setNotice(null);
     try {
-      const homework = await onAssign(parsed.data);
+      const outcome = await onAssign(parsed.data);
+      if (!outcome.ok) {
+        setAssignStatus("error");
+        setNotice({ tone: "error", message: outcome.message });
+        return;
+      }
+      const homework = outcome.homework;
       setAssigned(homework);
       setAssignStatus("success");
       vibrate(20);
@@ -397,29 +412,7 @@ export function useQuickAssign({
         message: error instanceof Error && error.message ? error.message : "숙제 등록에 실패했어요. 다시 시도해주세요",
       });
     }
-  }, [assigned, memberId, onAssign, onAssigned, selectedCards, selectedMember]);
-
-  const scheduleNextSession = useCallback(async () => {
-    if (!memberId || !suggestedNextSession || scheduleStatus === "success" || scheduleStatus === "loading") return;
-
-    const parsed = scheduleNextSessionInputSchema.safeParse({
-      memberId,
-      startsAt: suggestedNextSession.startsAt,
-    });
-    if (!parsed.success) {
-      setNotice({ tone: "error", message: "예약 시간이 올바르지 않아요" });
-      return;
-    }
-
-    setScheduleStatus("loading");
-    try {
-      await onScheduleNextSession(parsed.data);
-      setScheduleStatus("success");
-      vibrate(15);
-    } catch {
-      setScheduleStatus("error");
-    }
-  }, [memberId, onScheduleNextSession, scheduleStatus, suggestedNextSession]);
+  }, [assigned, lesson, memberId, onAssign, onAssigned, selectedCards, selectedMember]);
 
   const canSubmit = Boolean(memberId) && selectedCards.length > 0 && assignStatus !== "loading";
 
@@ -450,9 +443,7 @@ export function useQuickAssign({
     assignAndShare,
     canSubmit,
 
-    scheduleStatus,
-    suggestedNextSession,
-    scheduleNextSession,
+    lesson: lesson ?? null,
 
     notice,
     setNotice,
@@ -638,7 +629,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                           )}
                         </div>
                         <p className="text-[10px] text-slate-400 truncate">
-                          {ex.region || (ex as any).category} · {ex.defaultReps}
+                          {ex.region} · {ex.defaultReps}
                         </p>
                       </div>
                     </div>
@@ -813,31 +804,12 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
           </div>
         </section>
 
-        {/* 4. 다음 수업 예약 연계 (선택) */}
-        {qa.suggestedNextSession && qa.selectedMember && (
-          <button
-            type="button"
-            onClick={qa.scheduleNextSession}
-            disabled={qa.scheduleStatus === "success"}
-            className={cn(
-              "flex h-12 w-full items-center justify-center gap-2 rounded-2xl border text-xs font-semibold transition-all duration-150 active:scale-[0.98]",
-              qa.scheduleStatus === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-            )}
-          >
-            {qa.scheduleStatus === "success" ? (
-              <>
-                <Check className="size-4" />
-                다음 수업 {qa.suggestedNextSession.label} 예약됨
-              </>
-            ) : (
-              <>
-                <CalendarPlus className="size-4 text-[#3182F6]" />
-                다음 수업 예약: {qa.suggestedNextSession.label}
-              </>
-            )}
-          </button>
+        {/* 4. 수업 기록 연결 표시 (스케줄러에서 연 경우) */}
+        {qa.lesson && (
+          <p className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700">
+            <CalendarCheck className="size-4" />
+            {qa.lesson.label} 기록에 함께 저장돼요
+          </p>
         )}
       </div>
 
