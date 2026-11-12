@@ -1,4 +1,5 @@
 import { REHAB_EXERCISES } from "./exercises/rehab-db";
+import { searchExercises } from "./exercises/master-db";
 
 export interface ExerciseMedia {
   video?: string;
@@ -38,7 +39,6 @@ const MEDIA_BY_EXERCISE: Record<string, ExerciseMedia> = {
 
   // 1. 척추·골반 5분 루틴
   "버드독 (Bird Dog)": {
-    animatedFallback: `${GITHUB_GIF_CDN_BASE}/3239-h1ezqSu.gif`,
     poster: `${GITHUB_FREE_EXERCISE_DB_BASE}/All_Fours_Quad_Stretch/0.jpg`,
     alt: "버드독 척추 골반 교차 안정화 동작 안내",
   },
@@ -59,19 +59,17 @@ const MEDIA_BY_EXERCISE: Record<string, ExerciseMedia> = {
     alt: "엎드려 Y-레이즈 등 하부 승모근 수축 동작 안내",
   },
   "월 슬라이드 (Wall Slide)": {
-    animatedFallback: `${GITHUB_GIF_CDN_BASE}/0659-LEH9jxP.gif`,
     poster: `${GITHUB_IMAGE_CDN_BASE}/0659-LEH9jxP.jpg`,
     alt: "월 슬라이드 벽 밀착 어깨 가동성 동작 안내",
   },
 
   // 3. 고관절 가동성 4분 루틴
   "90-90 고관절 회전 스트레칭": {
-    animatedFallback: `${GITHUB_GIF_CDN_BASE}/1710-RQNVT10.gif`,
     poster: `${GITHUB_FREE_EXERCISE_DB_BASE}/90_90_Hamstring/0.jpg`,
     alt: "90-90 고관절 안팎 회전 가동성 스트레칭 안내",
   },
   "런지 힙 플렉서 스트레칭": {
-    animatedFallback: `${GITHUB_GIF_CDN_BASE}/1564-tFGKm99.gif`,
+    animatedFallback: `${GITHUB_GIF_CDN_BASE}/1559-00fJk9E.gif`,
     poster: `${GITHUB_FREE_EXERCISE_DB_BASE}/Bodyweight_Walking_Lunge/0.jpg`,
     alt: "런지 힙 플렉서 골반 앞쪽 장요근 이완 스트레칭 안내",
   },
@@ -166,10 +164,23 @@ export function getExerciseMedia(name: string): ExerciseMedia | null {
   );
   if (rehabMatch) {
     return {
-      animatedFallback: rehabMatch.gifUrl,
-      poster: rehabMatch.posterUrl,
+      animatedFallback: rehabMatch.gifUrl || undefined,
+      poster: rehabMatch.posterUrl || undefined,
       alt: `${rehabMatch.name} 재활 동작 안내`,
     };
+  }
+
+  // 4. 운동 마스터 DB (1,334종) 스마트 매칭
+  const masterMatches = searchExercises(trimmed, { limit: 1 });
+  if (masterMatches.length > 0) {
+    const match = masterMatches[0];
+    if (match.gifUrl || match.posterUrl) {
+      return {
+        animatedFallback: match.gifUrl || undefined,
+        poster: match.posterUrl || undefined,
+        alt: `${match.nameKo} 동작 안내`,
+      };
+    }
   }
 
   return null;

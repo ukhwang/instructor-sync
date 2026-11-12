@@ -3,6 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useDragControls, type PanInfo } from "motion/react";
 import {
+  Activity,
   CalendarPlus,
   Check,
   Copy,
@@ -15,7 +16,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { z } from "zod";
 
 import { shareToKakao, vibrate, copyToClipboard, toAbsoluteUrl, type ShareResult } from "@/lib/kakao-share";
@@ -26,6 +27,26 @@ import {
   searchRehabExercises,
   type RehabExerciseItem,
 } from "@/lib/exercises/rehab-db";
+import type { ExercisePickerItem } from "@/lib/exercises/master-db";
+
+function buildCardFromRehabId(id: string, sets?: number): SelectedCardItem | null {
+  const item = REHAB_EXERCISES.find((e) => e.id === id);
+  if (!item) return null;
+  const tags = item.coachingTags && item.coachingTags.length > 0 ? item.coachingTags : ["척추 중립", "복압 유지"];
+  return {
+    id: item.id,
+    name: item.name,
+    koreanOnlyName: item.koreanOnlyName,
+    sets: sets ?? item.defaultSets,
+    reps: item.defaultReps,
+    cue: item.defaultCue,
+    restSec: item.defaultRestSec,
+    gifUrl: item.gifUrl || "",
+    posterUrl: item.posterUrl || "",
+    availableCoachingTags: tags,
+    selectedCoachingTags: tags.slice(0, 2),
+  };
+}
 
 /* ────────────────────────────────────────────────────────────
  * 1. Presets & Zod Schemas
@@ -152,34 +173,23 @@ export function useQuickAssign({
   const [isPickingMember, setIsPickingMember] = useState<boolean>(!prefilledMember);
 
   // 가로 카드 슬롯에 담긴 운동 목록 (기본 2개 추천 + 운동별 맞춤 코칭 태그)
-  const [selectedCards, setSelectedCards] = useState<SelectedCardItem[]>([
-    {
-      id: "rehab-bird-dog",
-      name: "버드독 (Bird Dog)",
-      koreanOnlyName: "버드독",
-      sets: 3,
-      reps: "10회 (각)",
-      cue: "허리가 꺾이지 않도록 복압 유지",
-      restSec: 30,
-      gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/3239-h1ezqSu.gif",
-      posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/All_Fours_Quad_Stretch/0.jpg",
-      availableCoachingTags: ["척추 중립", "복압 유지", "허리 꺾임 주의"],
-      selectedCoachingTags: ["척추 중립", "복압 유지"],
-    },
-    {
-      id: "rehab-glute-bridge",
-      name: "글루트 브릿지 (Glute Bridge)",
-      koreanOnlyName: "글루트 브릿지",
-      sets: 3,
-      reps: "15회",
-      cue: "엉덩이에 힘을 꽉 주고 골반 수평",
-      restSec: 30,
-      gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1409-qKBpF7I.gif",
-      posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Glute_Bridge/0.jpg",
-      availableCoachingTags: ["골반 수평", "둔근 쥐어짜기", "무릎 모임 방지"],
-      selectedCoachingTags: ["골반 수평", "둔근 쥐어짜기"],
-    },
-  ]);
+  const [selectedCards, setSelectedCards] = useState<SelectedCardItem[]>(() => {
+    const birdDog = buildCardFromRehabId("rehab-bird-dog");
+    const gluteBridge = buildCardFromRehabId("rehab-glute-bridge");
+    return [birdDog, gluteBridge].filter(Boolean) as SelectedCardItem[];
+  });
+
+  // 마스터 DB (1,334종) 동적 로딩 & 검색
+  const [db, setDb] = useState<typeof import("@/lib/exercises/master-db") | null>(null);
+  const ensureDb = useCallback(() => {
+    if (!db) void import("@/lib/exercises/master-db").then(setDb);
+  }, [db]);
+
+  useEffect(() => {
+    if (open && !db) {
+      void import("@/lib/exercises/master-db").then(setDb);
+    }
+  }, [open, db]);
 
   // 검색창 상태
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -204,11 +214,30 @@ export function useQuickAssign({
     [memberPool, memberId],
   );
 
-  // 검색 결과
-  const searchResults = useMemo<RehabExerciseItem[]>(() => {
+  // 검색 결과 (1,334종 마스터 DB 동적 연결, 로딩 전 34종 재활 DB 폴백)
+  const searchResults = useMemo<ExercisePickerItem[]>(() => {
     if (!searchQuery.trim()) return [];
-    return searchRehabExercises(searchQuery).slice(0, 6);
-  }, [searchQuery]);
+    if (db) {
+      return db.searchExercises(searchQuery, { limit: 8 }).map(db.toPickerItem);
+    }
+    return searchRehabExercises(searchQuery).slice(0, 8).map((item) => ({
+      id: item.id,
+      name: item.name,
+      koreanOnlyName: item.koreanOnlyName,
+      englishName: item.englishName,
+      defaultSets: item.defaultSets,
+      defaultReps: item.defaultReps,
+      defaultRestSec: item.defaultRestSec,
+      defaultCue: item.defaultCue,
+      coachingTags: [...item.coachingTags],
+      gifUrl: item.gifUrl,
+      posterUrl: item.posterUrl,
+      region: item.category,
+      equipment: item.equipment,
+      source: "rehab" as const,
+      mediaMatch: "exact" as const,
+    }));
+  }, [db, searchQuery]);
 
   // 세트 수 조정 (+ / -)
   const updateCardSets = useCallback((id: string, delta: number) => {
@@ -244,7 +273,7 @@ export function useQuickAssign({
   }, []);
 
   // 검색 결과에서 운동 카드 추가
-  const addExercise = useCallback((item: RehabExerciseItem) => {
+  const addExercise = useCallback((item: ExercisePickerItem | RehabExerciseItem) => {
     vibrate(10);
     setSelectedCards((prev) => {
       if (prev.length >= 3) {
@@ -256,20 +285,24 @@ export function useQuickAssign({
         return prev;
       }
       const tags = item.coachingTags && item.coachingTags.length > 0 ? item.coachingTags : ["척추 중립", "복압 유지"];
+      const defaultSets = "defaultSets" in item ? item.defaultSets : 3;
+      const defaultReps = "defaultReps" in item ? item.defaultReps : "10회";
+      const defaultCue = "defaultCue" in item ? item.defaultCue : "통증 없는 범위에서 천천히";
+      const defaultRestSec = "defaultRestSec" in item ? item.defaultRestSec : 30;
       return [
         ...prev,
         {
           id: item.id,
           name: item.name,
           koreanOnlyName: item.koreanOnlyName,
-          sets: item.defaultSets,
-          reps: item.defaultReps,
-          cue: item.defaultCue,
-          restSec: item.defaultRestSec,
-          gifUrl: item.gifUrl,
-          posterUrl: item.posterUrl,
+          sets: defaultSets,
+          reps: defaultReps,
+          cue: defaultCue,
+          restSec: defaultRestSec,
+          gifUrl: item.gifUrl || "",
+          posterUrl: item.posterUrl || "",
           availableCoachingTags: tags,
-          selectedCoachingTags: [tags[0]],
+          selectedCoachingTags: [tags[0] || "척추 중립"],
         },
       ];
     });
@@ -277,97 +310,23 @@ export function useQuickAssign({
     setIsSearching(false);
   }, []);
 
-  // 추천 프리셋 원터치 일괄 채우기
+  // 추천 프리셋 원터치 일괄 채우기 (rehab-db 연동)
   const applyPreset = useCallback((presetId: RoutinePresetId) => {
     vibrate(12);
     if (presetId === "spine-pelvis-5") {
-      setSelectedCards([
-        {
-          id: "rehab-bird-dog",
-          name: "버드독 (Bird Dog)",
-          koreanOnlyName: "버드독",
-          sets: 3,
-          reps: "10회 (각)",
-          cue: "허리가 꺾이지 않도록 복압 유지",
-          restSec: 30,
-          gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/3239-h1ezqSu.gif",
-          posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/All_Fours_Quad_Stretch/0.jpg",
-          availableCoachingTags: ["척추 중립", "복압 유지", "허리 꺾임 주의"],
-          selectedCoachingTags: ["척추 중립", "복압 유지"],
-        },
-        {
-          id: "rehab-glute-bridge",
-          name: "글루트 브릿지 (Glute Bridge)",
-          koreanOnlyName: "글루트 브릿지",
-          sets: 3,
-          reps: "15회",
-          cue: "엉덩이에 힘을 꽉 주고 골반 수평",
-          restSec: 30,
-          gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1409-qKBpF7I.gif",
-          posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Barbell_Glute_Bridge/0.jpg",
-          availableCoachingTags: ["골반 수평", "둔근 쥐어짜기", "무릎 모임 방지"],
-          selectedCoachingTags: ["골반 수평", "둔근 쥐어짜기"],
-        },
-      ]);
+      const birdDog = buildCardFromRehabId("rehab-bird-dog");
+      const gluteBridge = buildCardFromRehabId("rehab-glute-bridge");
+      setSelectedCards([birdDog, gluteBridge].filter(Boolean) as SelectedCardItem[]);
     } else if (presetId === "round-shoulder-3") {
-      setSelectedCards([
-        {
-          id: "rehab-prone-y-raise",
-          name: "엎드려 Y-레이즈 (Prone Y-Raise)",
-          koreanOnlyName: "엎드려 Y-레이즈",
-          sets: 3,
-          reps: "12회",
-          cue: "날개뼈 아래쪽 모아주기",
-          restSec: 30,
-          gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/3541-PbzNu7c.gif",
-          posterUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/images/3541-PbzNu7c.jpg",
-          availableCoachingTags: ["하부승모근 집중", "어깨 솟음 방지", "엄지 하늘"],
-          selectedCoachingTags: ["하부승모근 집중", "어깨 솟음 방지"],
-        },
-        {
-          id: "rehab-wall-slide",
-          name: "월 슬라이드 (Wall Slide)",
-          koreanOnlyName: "월 슬라이드",
-          sets: 3,
-          reps: "10회",
-          cue: "팔꿈치와 손등 벽 밀착 유지",
-          restSec: 30,
-          gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/0659-LEH9jxP.gif",
-          posterUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/images/0659-LEH9jxP.jpg",
-          availableCoachingTags: ["손등·팔꿈치 밀착", "어깨 하강", "흉추 신전"],
-          selectedCoachingTags: ["손등·팔꿈치 밀착", "어깨 하강"],
-        },
-      ]);
+      const yRaise = buildCardFromRehabId("rehab-prone-y-raise");
+      const scapula = buildCardFromRehabId("rehab-scapula-pushup") || buildCardFromRehabId("rehab-wall-slide");
+      setSelectedCards([yRaise, scapula].filter(Boolean) as SelectedCardItem[]);
     } else if (presetId === "hip-mobility-4") {
-      setSelectedCards([
-        {
-          id: "rehab-90-90-hip",
-          name: "90-90 고관절 회전",
-          koreanOnlyName: "90-90 고관절 회전",
-          sets: 3,
-          reps: "10회 (각)",
-          cue: "골반 천천히 좌우 회전",
-          restSec: 30,
-          gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1710-RQNVT10.gif",
-          posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/90_90_Hamstring/0.jpg",
-          availableCoachingTags: ["골반 수평", "상체 세우기", "통증 없는 범위"],
-          selectedCoachingTags: ["골반 수평", "통증 없는 범위"],
-        },
-        {
-          id: "rehab-hip-flexor-lunge",
-          name: "런지 힙 플렉서 스트레칭",
-          koreanOnlyName: "런지 힙 플렉서 스트레칭",
-          sets: 2,
-          reps: "30초 (각)",
-          cue: "골반 앞쪽 장요근 늘리기",
-          restSec: 30,
-          gifUrl: "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/videos/1564-tFGKm99.gif",
-          posterUrl: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bodyweight_Walking_Lunge/0.jpg",
-          availableCoachingTags: ["골반 후방경사", "장요근 신장", "상체 중립"],
-          selectedCoachingTags: ["골반 후방경사", "장요근 신장"],
-        },
-      ]);
+      const hip90 = buildCardFromRehabId("rehab-90-90-hip");
+      const hipFlexor = buildCardFromRehabId("rehab-hip-flexor-lunge");
+      setSelectedCards([hip90, hipFlexor].filter(Boolean) as SelectedCardItem[]);
     }
+  }, []);
   }, []);
 
   const selectMember = useCallback((id: string) => {
@@ -518,6 +477,7 @@ export function useQuickAssign({
     isSearching,
     setIsSearching,
     searchResults,
+    ensureDb,
 
     assignStatus,
     assigned,
@@ -641,9 +601,13 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
               onChange={(e) => {
                 qa.setSearchQuery(e.target.value);
                 qa.setIsSearching(true);
+                qa.ensureDb();
               }}
-              onFocus={() => qa.setIsSearching(true)}
-              placeholder="운동 검색 (예: 푸시, 버드독, 브릿지, 런지)…"
+              onFocus={() => {
+                qa.setIsSearching(true);
+                qa.ensureDb();
+              }}
+              placeholder="운동 검색 (예: 푸시, 벤치프레스, 데드버그, 랫풀다운)…"
               className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/70 pl-10 pr-9 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:border-[#3182F6] focus:bg-white focus:outline-none transition-colors"
             />
             {qa.searchQuery && (
@@ -681,16 +645,34 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                     className="flex w-full items-center justify-between rounded-xl p-2 text-left hover:bg-slate-50 active:scale-[0.98] transition-all group"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="size-10 rounded-lg overflow-hidden bg-slate-100 shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={ex.gifUrl || ex.posterUrl} alt="" className="size-full object-cover" />
+                      <div className="size-10 rounded-lg overflow-hidden bg-slate-100 shrink-0 relative flex items-center justify-center">
+                        {ex.gifUrl || ex.posterUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={ex.gifUrl || ex.posterUrl} alt="" className="size-full object-cover" />
+                        ) : (
+                          <div className="size-full flex items-center justify-center bg-slate-100 text-slate-400">
+                            <Activity className="size-5" />
+                          </div>
+                        )}
+                        {ex.mediaMatch === "similar" && (
+                          <span className="absolute bottom-0 inset-x-0 bg-amber-500/90 text-white text-[8px] font-bold text-center py-0.5 leading-none">
+                            참고
+                          </span>
+                        )}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-bold text-xs text-slate-900 truncate group-hover:text-[#3182F6]">
-                          {ex.name}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-bold text-xs text-slate-900 truncate group-hover:text-[#3182F6]">
+                            {ex.name}
+                          </p>
+                          {ex.source === "rehab" && (
+                            <span className="shrink-0 rounded bg-emerald-50 px-1 py-0.2 text-[9px] font-bold text-emerald-600 border border-emerald-200">
+                              재활
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-400 truncate">
-                          {ex.category} · {ex.defaultReps}
+                          {ex.region || (ex as any).category} · {ex.defaultReps}
                         </p>
                       </div>
                     </div>
@@ -756,13 +738,20 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                 >
                   <div>
                     {/* 동작가이드 썸네일 (무한루프 재생) */}
-                    <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-900 mb-2.5">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={card.gifUrl || card.posterUrl}
-                        alt={card.koreanOnlyName}
-                        className="size-full object-cover"
-                      />
+                    <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-900 mb-2.5 flex items-center justify-center">
+                      {card.gifUrl || card.posterUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={card.gifUrl || card.posterUrl}
+                          alt={card.koreanOnlyName}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-slate-400 gap-1">
+                          <Activity className="size-6 text-slate-500" />
+                          <span className="text-[10px] text-slate-400 font-medium">가이드 영상 준비중</span>
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() => qa.removeCard(card.id)}
