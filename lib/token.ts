@@ -27,8 +27,10 @@ export function getSeoulDateString(date: Date = new Date()): string {
   }).format(date);
 }
 
-export function getSeoulDateTimeString(dateString: string | Date): string {
+export function getSeoulDateTimeString(dateString: string | Date | null | undefined): string {
+  if (!dateString) return '—';
   const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
+  if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('ko-KR', {
     timeZone: 'Asia/Seoul',
     month: 'long',

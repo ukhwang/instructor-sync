@@ -12,15 +12,16 @@ function haptic(ms: number): void {
 export function useBriefingCard(openingLine: string) {
   const [draft, setDraft] = useState(openingLine);
   const [editing, setEditing] = useState(false);
+  // 새 브리핑이 들어오면 초안을 초기화한다 (렌더 중 이전 값 비교 패턴, effect 미사용).
+  const [sourceLine, setSourceLine] = useState(openingLine);
+  if (sourceLine !== openingLine) {
+    setSourceLine(openingLine);
+    setDraft(openingLine);
+    setEditing(false);
+  }
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // 새 브리핑이 들어오면 초안을 초기화한다.
-  useEffect(() => {
-    setDraft(openingLine);
-    setEditing(false);
-  }, [openingLine]);
 
   useEffect(
     () => () => {

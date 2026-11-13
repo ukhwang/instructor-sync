@@ -750,7 +750,7 @@ export async function openHomeworkRpc(token: string): Promise<OpenHomeworkResult
   if (hw.revoked_at || hw.status === 'revoked') {
     return { success: false, reason: 'revoked' };
   }
-  if (new Date(hw.token_expires_at) < new Date()) {
+  if (new Date(hw.token_expires_at ?? 0) < new Date()) {
     return { success: false, reason: 'expired' };
   }
 
@@ -767,8 +767,8 @@ export async function openHomeworkRpc(token: string): Promise<OpenHomeworkResult
       why: hw.why,
       status: hw.status,
       token: hw.token,
-      token_expires_at: hw.token_expires_at,
-      created_at: hw.created_at,
+      token_expires_at: hw.token_expires_at ?? new Date(0).toISOString(),
+      created_at: hw.created_at ?? new Date(0).toISOString(),
     },
     member: {
       id: member.id,
@@ -806,7 +806,7 @@ export async function submitHomeworkFeedbackRpc(
   if (hw.revoked_at || hw.status === 'revoked') {
     return { success: false, reason: 'revoked' };
   }
-  if (new Date(hw.token_expires_at).getTime() <= Date.now()) {
+  if (new Date(hw.token_expires_at ?? 0).getTime() <= Date.now()) {
     return { success: false, reason: 'expired' };
   }
   if (kind !== 'complete' && kind !== 'cant') {
@@ -877,11 +877,11 @@ export async function submitHomeworkFeedbackV2Rpc(
   const hw = demoHomeworks.find((entry) => entry.token === token);
   if (!hw) return { success: false, reason: 'not_found' };
   if (hw.revoked_at || hw.status === 'revoked') return { success: false, reason: 'revoked' };
-  if (new Date(hw.token_expires_at).getTime() <= Date.now()) return { success: false, reason: 'expired' };
+  if (new Date(hw.token_expires_at ?? 0).getTime() <= Date.now()) return { success: false, reason: 'expired' };
   if (!Number.isInteger(payload.discomfort_level) || payload.discomfort_level < 1 || payload.discomfort_level > 10) {
     return { success: false, reason: 'invalid_discomfort_level' };
   }
-  if ((hw.logs || []).some((entry) => ['complete', 'partial', 'cant'].includes(entry.kind))) {
+  if ((hw.logs || []).some((entry) => entry.kind !== undefined && ['complete', 'partial', 'cant'].includes(entry.kind))) {
     return { success: false, reason: 'already_submitted' };
   }
   const itemIds = new Set((hw.items || []).map((item) => item.id));
@@ -944,7 +944,7 @@ export async function logHomeworkRpc(
   if (hw.revoked_at || hw.status === 'revoked') {
     return { success: false, reason: 'revoked' };
   }
-  if (new Date(hw.token_expires_at) < new Date()) {
+  if (new Date(hw.token_expires_at ?? 0) < new Date()) {
     return { success: false, reason: 'expired' };
   }
 

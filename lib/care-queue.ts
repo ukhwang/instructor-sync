@@ -37,9 +37,9 @@ export function buildCareQueue(
   return members
     .map((member) => {
       const recentHomeworks = homeworks.filter((homework) => {
-        const createdAt = Date.parse(homework.created_at);
+        const createdAt = Date.parse(homework.created_at ?? "");
         return (
-          homework.member_id === member.id &&
+          (homework.member_id ?? homework.memberId) === member.id &&
           homework.status !== "draft" &&
           homework.status !== "revoked" &&
           Number.isFinite(createdAt) &&
@@ -49,7 +49,7 @@ export function buildCareQueue(
       });
       const submissions = recentHomeworks.flatMap((homework) =>
         (homework.logs ?? []).filter((log) => {
-          const submittedAt = Date.parse(log.created_at);
+          const submittedAt = Date.parse(log.created_at ?? "");
           return (
             (log.kind === "complete" || log.kind === "partial" || log.kind === "cant") &&
             Number.isFinite(submittedAt) &&
@@ -61,7 +61,7 @@ export function buildCareQueue(
       const completedHomeworkIds = new Set(
         submissions
           .filter((log) => log.kind === "complete")
-          .map((log) => log.homework_id)
+          .map((log) => log.homework_id ?? log.homeworkId)
       );
       const assignedCount = recentHomeworks.length;
       const completedCount = completedHomeworkIds.size;
@@ -87,15 +87,12 @@ export function buildCareQueue(
         reasons.push("needs_session_check");
       }
 
-      const latestSubmissionAt = submissions.reduce<string | null>(
-        (latest, log) =>
-          !latest || Date.parse(log.created_at) > Date.parse(latest)
-            ? log.created_at
-            : latest,
-        null
-      );
+      const latestSubmissionAt = submissions.reduce<string | null>((latest, log) => {
+        if (!log.created_at) return latest;
+        return !latest || Date.parse(log.created_at) > Date.parse(latest) ? log.created_at : latest;
+      }, null);
 
-      return {
+      const entry: CareQueueEntry = {
         member,
         reasons,
         assignedCount,
@@ -103,6 +100,7 @@ export function buildCareQueue(
         completionRate,
         latestSubmissionAt,
       };
+      return entry;
     })
     .filter((entry) => entry.reasons.length > 0)
     .sort((a, b) => {

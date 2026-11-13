@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assessRisk, buildBriefing, buildOpeningLine, completionRate } from './rules';
-import { BriefingSchema, type FeedbackInput } from './types';
+import { loadModule } from './load-module.mjs';
 
-const base: FeedbackInput = {
+const { assessRisk, buildBriefing, buildOpeningLine, completionRate } = loadModule('lib/briefing/rules.ts');
+const { BriefingSchema } = loadModule('lib/briefing/types.ts');
+
+/** @type {import('../lib/briefing/types').FeedbackInput} */
+const base = {
   submittedAt: '2026-11-09T09:30:00.000Z',
   completedSets: 3,
   prescribedSets: 3,

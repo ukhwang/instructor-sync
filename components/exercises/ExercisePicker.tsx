@@ -94,7 +94,7 @@ export function ExercisePicker({
                   default_effort_kind: "reps",
                   default_rep_count: parseInt(item.defaultReps, 10) || 10,
                   default_hold_seconds: item.defaultReps.includes("초") ? 30 : null,
-                  default_seconds_per_rep: null,
+                  default_seconds_per_rep: 3, // lib/coach.ts 기본값과 동일
                   default_rest_seconds: item.defaultRestSec,
                   default_per_side: item.defaultReps.includes("각"),
                   aliases: [item.koreanOnlyName, item.englishName],

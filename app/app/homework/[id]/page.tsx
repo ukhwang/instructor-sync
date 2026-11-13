@@ -270,7 +270,7 @@ export default function HomeworkDetailPage({
                   pain: { label: "통증 발생", bg: "bg-red-200 text-red-950 font-bold" },
                   note: { label: "메모", bg: "bg-blue-100 text-blue-900 font-bold" },
                 };
-                const kindBadge = kindLabels[log.kind] || kindLabels.note;
+                const kindBadge = (log.kind && kindLabels[log.kind]) || kindLabels.note;
 
                 return (
                   <div

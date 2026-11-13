@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
+import { readFileSync } from "node:fs";
+import { loadModule } from "./load-module.mjs";
+
+// master-db 와 rehab-db 가 같은 모듈 인스턴스를 공유해야 참조 동일성 검사가 성립한다.
+const cache = new Map();
+const mocks = {
+  "./master-db.instructions.json": JSON.parse(
+    readFileSync(new URL("../lib/exercises/master-db.instructions.json", import.meta.url), "utf8"),
+  ),
+};
+
+const {
   MASTER_DB_SIZE,
   getAllExercises,
   getExerciseById,
@@ -9,8 +20,8 @@ import {
   toPickerItem,
   EXERCISE_REGIONS,
   EQUIPMENT_GROUPS,
-} from "./master-db";
-import { REHAB_EXERCISES } from "./rehab-db";
+} = loadModule("lib/exercises/master-db.ts", mocks, cache);
+const { REHAB_EXERCISES } = loadModule("lib/exercises/rehab-db.ts", mocks, cache);
 
 const all = getAllExercises();
 
@@ -19,7 +30,7 @@ test("총 1,334종, ID·한국어 이름·미디어 모두 중복 0건", () => {
   assert.equal(all.length, 1334);
   assert.equal(new Set(all.map((e) => e.id)).size, all.length);
   assert.equal(new Set(all.map((e) => e.nameKo)).size, all.length);
-  const datasetIds = all.map((e) => e.datasetId).filter((id): id is string => id !== null && id.length > 0);
+  const datasetIds = all.map((e) => e.datasetId).filter((id) => id !== null && id.length > 0);
   const exactOwners = all.filter((e) => e.mediaMatch === "exact").map((e) => e.datasetId);
   assert.equal(new Set(exactOwners).size, exactOwners.length, "같은 데이터셋 GIF를 exact로 쓰는 항목이 둘 이상");
   assert.ok(datasetIds.length > 1300);
@@ -55,7 +66,7 @@ test("재활과 겹친 13종은 헬스 DB에서 제거되고 GIF가 병합된다
 });
 
 test("데이터셋 내부 중복 5건은 대체 GIF로 보존된다", () => {
-  for (const [dropped, kept] of [["2800", "2799"], ["1731", "0296"], ["1680", "0422"], ["1307", "0653"], ["2801", "2802"]] as const) {
+  for (const [dropped, kept] of [["2800", "2799"], ["1731", "0296"], ["1680", "0422"], ["1307", "0653"], ["2801", "2802"]]) {
     assert.equal(getExerciseById(`ex-${dropped}`), undefined);
     assert.ok(getExerciseById(`ex-${kept}`)?.altGifUrl?.includes(`/${dropped}-`));
   }
@@ -63,8 +74,8 @@ test("데이터셋 내부 중복 5건은 대체 GIF로 보존된다", () => {
 
 test("부위·기구 값은 정의된 목록 안에 있다", () => {
   for (const e of all) {
-    assert.ok((EXERCISE_REGIONS as readonly string[]).includes(e.region), e.id);
-    assert.ok((EQUIPMENT_GROUPS as readonly string[]).includes(e.equipment), e.id);
+    assert.ok(EXERCISE_REGIONS.includes(e.region), e.id);
+    assert.ok(EQUIPMENT_GROUPS.includes(e.equipment), e.id);
   }
   assert.equal(getExerciseById("ex-0574")?.equipment, "머신", "lever bent over row 는 머신");
   assert.equal(getExerciseById("ex-3296")?.equipment, "맨몸", "front lever 는 체조 동작");

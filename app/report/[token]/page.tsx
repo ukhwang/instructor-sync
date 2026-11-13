@@ -1,66 +1,64 @@
-import { Metadata } from "next";
-import { getMilestoneReportAction } from "@/app/actions/report";
+import type { Metadata } from "next";
+
 import { MilestoneReportCard } from "@/components/milestone/MilestoneReportCard";
 import { COPY } from "@/lib/copy";
+import { SAMPLE_REPORT_TOKEN, buildMilestoneView, buildSampleReport } from "@/lib/milestone-report";
+import { openMilestoneReport } from "@/lib/milestone-server";
 
 export const metadata: Metadata = {
-  title: "운동숙제 — 10회차 마일스톤 성과 리포트",
-  robots: {
-    index: false,
-    follow: false,
-  },
+  title: "운동숙제 — 마일스톤 리포트",
+  robots: { index: false, follow: false },
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function MilestoneReportPage({
-  params,
-}: {
-  params: Promise<{ token: string }>;
-}) {
-  const resolvedParams = await params;
-  const token = resolvedParams.token;
+const FAILURE_MESSAGE = {
+  not_found: "링크가 올바르지 않아요. 담당 원장님께 새 링크를 받아주세요.",
+  revoked: "원장님이 이 리포트 링크를 회수했어요.",
+  expired: "리포트 링크 기간(30일)이 지났어요. 담당 원장님께 새 링크를 받아주세요.",
+  unavailable: "잠시 리포트를 불러오지 못했어요. 조금 뒤 다시 열어주세요.",
+} as const;
 
-  // token 형식: rep-{memberId}-{timestamp}
-  const parts = token.split("-");
-  const memberId = parts.length >= 2 ? parts[1] : "demo-member";
+export default async function MilestoneReportPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const isSample = token === SAMPLE_REPORT_TOKEN;
+  const outcome = isSample
+    ? ({ ok: true, report: buildSampleReport() } as const)
+    : await openMilestoneReport(token);
 
-  try {
-    const reportData = await getMilestoneReportAction(memberId);
-
+  if (!outcome.ok) {
     return (
-      <div className="min-h-screen bg-[#0F172A] text-white flex flex-col justify-between py-8 px-4">
-        <div className="max-w-xl w-full mx-auto space-y-6">
-          <MilestoneReportCard
-            member={reportData.member}
-            homeworks={reportData.homeworks}
-            logs={reportData.logs}
-            aiSummary={reportData.aiSummary}
-            reportToken={token}
-            studioName={reportData.studioName}
-            sessionNumber={reportData.sessionNumber}
-            focusPainArea={reportData.focusPainArea}
-            hideShareButton={true}
-          />
-        </div>
-
-        <footer className="max-w-xl w-full mx-auto pt-8 text-center">
-          <p className="text-xs font-mono text-slate-400">
-            {reportData.studioName} · {COPY.BRAND_NAME}
-          </p>
-        </footer>
-      </div>
-    );
-  } catch {
-    return (
-      <div className="min-h-screen bg-[#0F172A] text-white flex flex-col justify-center items-center p-4">
-        <div className="max-w-md w-full p-6 bg-slate-800 rounded-2xl text-center space-y-4 border border-slate-700">
-          <h1 className="text-xl font-bold">리포트를 찾을 수 없습니다</h1>
-          <p className="text-sm text-slate-400">
-            링크가 유효하지 않거나 만료되었습니다. 담당 강사님께 문의해주세요.
-          </p>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0F172A] p-4 text-white">
+        <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-700 bg-slate-800 p-6 text-center">
+          <h1 className="text-xl font-bold">리포트를 열 수 없어요</h1>
+          <p className="text-base text-slate-300">{FAILURE_MESSAGE[outcome.reason]}</p>
         </div>
       </div>
     );
   }
+
+  const view = buildMilestoneView(outcome.report);
+
+  return (
+    <div className="flex min-h-screen flex-col justify-between bg-[#0F172A] px-4 py-8 text-white">
+      <div className="mx-auto w-full max-w-xl space-y-6">
+        <MilestoneReportCard
+          member={{ name: view.memberName }}
+          homeworks={view.homeworks}
+          logs={view.logs}
+          aiSummary={view.summary}
+          reportToken={token}
+          studioName={view.studioName}
+          sessionNumber={view.sessionNumber}
+          hideShareButton
+          sampleNotice={isSample ? "시연용 샘플 리포트예요. 실제 회원의 기록이 아니에요." : undefined}
+        />
+      </div>
+      <footer className="mx-auto w-full max-w-xl pt-8 text-center">
+        <p className="font-mono text-xs text-slate-400">
+          {view.studioName} · {COPY.BRAND_NAME} · 회원이 직접 남긴 기록으로 만든 리포트
+        </p>
+      </footer>
+    </div>
+  );
 }

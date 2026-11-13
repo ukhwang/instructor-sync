@@ -52,14 +52,15 @@ export interface Member {
   ptSessionCount?: number;
   nextSessionAt?: ISODateString | null;
   avatarUrl?: string | null;
-  trainer_id?: string;
-  phone?: string;
-  package_total?: number;
-  package_remaining?: number;
+  /* ── DB(members 테이블) 컬럼: 조회 결과에 항상 존재 ── */
+  trainer_id: string;
+  phone: string;
+  package_total: number;
+  package_remaining: number;
   package_expires_on?: string | null;
-  end_state?: string;
-  created_at?: string;
-  updated_at?: string;
+  end_state: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface HomeworkItem {

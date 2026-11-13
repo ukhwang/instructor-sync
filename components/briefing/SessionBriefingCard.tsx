@@ -1,21 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import { motion } from 'motion/react';
 import type { Briefing, RiskLevel } from '@/lib/briefing/types';
 import { useBriefingCard } from './useBriefingCard';
 
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function subscribeReducedMotion(onChange: () => void): () => void {
+  if (!window.matchMedia) return () => {};
+  const mq = window.matchMedia(REDUCED_MOTION_QUERY);
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+
 function useReducedMotion(): boolean {
-  const [shouldReduce, setShouldReduce] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setShouldReduce(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setShouldReduce(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  return shouldReduce;
+  return useSyncExternalStore(
+    subscribeReducedMotion,
+    () => Boolean(window.matchMedia?.(REDUCED_MOTION_QUERY).matches),
+    () => false,
+  );
 }
 
 interface SessionBriefingCardProps {

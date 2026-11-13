@@ -5,7 +5,7 @@ import { Check, Loader2, MessageCircle, Sparkles, TrendingDown, TrendingUp } fro
 import { useCallback, useId, useMemo, useState } from "react";
 
 import { shareToKakao, vibrate, type ShareResult } from "@/lib/kakao-share";
-import { PAIN_AREAS, type Homework, type HomeworkLog, type Member, type PainArea } from "@/lib/types";
+import { PAIN_AREAS, type Homework, type HomeworkLog, type PainArea } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /* ────────────────────────────────────────────────────────────
@@ -13,13 +13,15 @@ import { cn } from "@/lib/utils";
  * ──────────────────────────────────────────────────────────── */
 
 export interface MilestoneReportCardProps {
-  member: Member;
+  member: { name: string; ptSessionCount?: number };
   /** 리포트 기간 내 배정된 숙제 */
   homeworks: Homework[];
   /** 리포트 기간 내 회원 기록 */
   logs: HomeworkLog[];
-  /** Edge Function(WEEKLY_SUMMARY / NEXT_SESSION_BRIEF)이 생성하고 강사가 승인한 요약 */
+  /** 기록 기반 요약 문장 (lib/milestone-report.ts buildFactualSummary) */
   aiSummary: string;
+  /** 시연용 샘플일 때 상단에 표시할 안내 */
+  sampleNotice?: string;
   reportToken: string;
   studioName: string;
   /** 기본값: member.ptSessionCount */
@@ -74,7 +76,7 @@ function downsample<T>(values: T[], max: number): T[] {
 function dominantPainArea(logs: HomeworkLog[]): PainArea | null {
   const counts = new Map<PainArea, number>();
   for (const log of logs) {
-    for (const area of log.painAreas) counts.set(area, (counts.get(area) ?? 0) + 1);
+    for (const area of log.painAreas ?? []) counts.set(area, (counts.get(area) ?? 0) + 1);
   }
   let best: PainArea | null = null;
   let bestCount = 0;
@@ -102,8 +104,10 @@ export function useMilestoneMetrics(
       if (homework.status === "completed") achieved.add(homework.id);
     }
     for (const log of logs) {
-      if (homeworkIds.has(log.homeworkId) && log.totalSets > 0 && log.completedSets >= log.totalSets) {
-        achieved.add(log.homeworkId);
+      const homeworkId = log.homeworkId ?? log.homework_id;
+      const totalSets = log.totalSets ?? 0;
+      if (homeworkId && homeworkIds.has(homeworkId) && totalSets > 0 && (log.completedSets ?? 0) >= totalSets) {
+        achieved.add(homeworkId);
       }
     }
     const achievedCount = achieved.size;
@@ -111,8 +115,13 @@ export function useMilestoneMetrics(
 
     const painArea = focusPainArea ?? dominantPainArea(logs);
     const scored = logs
-      .filter((log): log is HomeworkLog & { painScore: number } => log.painScore !== null)
-      .filter((log) => (painArea ? log.painAreas.includes(painArea) || log.painAreas.length === 0 : true))
+      .flatMap((log) =>
+        typeof log.painScore === "number" && log.loggedAt ? [{ ...log, painScore: log.painScore, loggedAt: log.loggedAt }] : [],
+      )
+      .filter((log) => {
+        const areas = log.painAreas ?? [];
+        return painArea ? areas.includes(painArea) || areas.length === 0 : true;
+      })
       .sort((a, b) => new Date(a.loggedAt).getTime() - new Date(b.loggedAt).getTime())
       .map<PainPoint>((log) => ({ at: log.loggedAt, score: Math.min(10, Math.max(0, log.painScore)) }));
 
@@ -121,7 +130,7 @@ export function useMilestoneMetrics(
     const last = painPoints[painPoints.length - 1];
 
     const assignedTimes = homeworks
-      .map((h) => new Date(h.assignedAt).getTime())
+      .map((h) => new Date(h.assignedAt ?? h.created_at ?? "").getTime())
       .filter((t) => !Number.isNaN(t))
       .sort((a, b) => a - b);
     const periodStart = assignedTimes[0];
@@ -164,11 +173,12 @@ export function MilestoneReportCard({
   studioName,
   sessionNumber,
   focusPainArea,
+  sampleNotice,
   hideShareButton = false,
   onShared,
 }: MilestoneReportCardProps) {
   const metrics = useMilestoneMetrics(homeworks, logs, focusPainArea);
-  const session = sessionNumber ?? member.ptSessionCount;
+  const session = sessionNumber ?? member.ptSessionCount ?? 0;
   const [shareStatus, setShareStatus] = useState<"idle" | "loading" | ShareResult>("idle");
 
   const handleShare = useCallback(async () => {
@@ -194,6 +204,11 @@ export function MilestoneReportCard({
 
   return (
     <div className="mx-auto w-full max-w-[420px]">
+      {sampleNotice && (
+        <p role="note" className="mb-3 rounded-2xl bg-amber-100 px-4 py-3 text-center text-sm font-bold text-amber-900">
+          {sampleNotice}
+        </p>
+      )}
       <motion.article
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
@@ -274,14 +289,14 @@ export function MilestoneReportCard({
           <section className="rounded-2xl bg-slate-50 px-4 py-4">
             <p className="flex items-center gap-1.5 text-sm font-semibold text-[#3182F6]">
               <Sparkles className="size-4" />
-              다음 10회 방향
+              기록 요약
             </p>
             <p className="mt-2 text-[15px] leading-relaxed text-slate-800">{aiSummary}</p>
           </section>
         </div>
 
         <footer className="flex items-center justify-between border-t border-slate-100 px-6 py-3.5 text-xs text-slate-400">
-          <span>담당 원장 확인 완료</span>
+          <span>회원 직접 기록 기반</span>
           <span className="font-semibold tracking-tight text-slate-500">운동숙제</span>
         </footer>
       </motion.article>
