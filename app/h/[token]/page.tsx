@@ -76,6 +76,7 @@ export default async function MemberHomeworkPage({
       reps: Number.parseInt(it.target_reps || "10", 10) || 10,
       durationSec: null,
       restSec: it.rest_seconds ?? 30,
+      requirement: it.requirement === "optional" ? "optional" : "required",
       target_reps: it.target_reps ?? undefined,
       seconds_per_rep: it.seconds_per_rep ?? undefined,
       per_side: it.per_side ?? undefined,

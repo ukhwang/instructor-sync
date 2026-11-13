@@ -13,6 +13,7 @@ import {
   Minus,
   Plus,
   Search,
+  Star,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -43,6 +44,7 @@ function buildCardFromRehabId(id: string, sets?: number): SelectedCardItem | nul
     posterUrl: item.posterUrl || "",
     availableCoachingTags: tags,
     selectedCoachingTags: tags.slice(0, 2),
+    required: true,
   };
 }
 
@@ -109,6 +111,8 @@ export interface SelectedCardItem {
   posterUrl: string;
   availableCoachingTags: string[];
   selectedCoachingTags: string[];
+  /** ★ = 필수. false 면 회원이 건너뛸 수 있는 선택 동작 */
+  required: boolean;
 }
 
 export interface ShareModalData {
@@ -242,6 +246,20 @@ export function useQuickAssign({
     );
   }, []);
 
+  // 별표(★) 토글: 필수 ↔ 선택. 필수가 0개가 되는 토글은 막는다.
+  const toggleRequired = useCallback((id: string) => {
+    vibrate(8);
+    setSelectedCards((prev) => {
+      const target = prev.find((c) => c.id === id);
+      if (!target) return prev;
+      if (target.required && prev.filter((c) => c.required).length <= 1) {
+        setNotice({ tone: "info", message: "필수(★) 동작이 1개는 있어야 해요" });
+        return prev;
+      }
+      return prev.map((c) => (c.id === id ? { ...c, required: !c.required } : c));
+    });
+  }, []);
+
   // 카드 제거 (✕)
   const removeCard = useCallback((id: string) => {
     vibrate(8);
@@ -279,6 +297,7 @@ export function useQuickAssign({
           posterUrl: item.posterUrl || "",
           availableCoachingTags: tags,
           selectedCoachingTags: [tags[0] || "척추 중립"],
+          required: true,
         },
       ];
     });
@@ -357,6 +376,7 @@ export function useQuickAssign({
       restSec: c.restSec,
       gifUrl: c.gifUrl,
       posterUrl: c.posterUrl,
+      required: c.required,
     }));
 
     const parsed = assignHomeworkInputSchema.safeParse({
@@ -414,7 +434,8 @@ export function useQuickAssign({
     }
   }, [assigned, lesson, memberId, onAssign, onAssigned, selectedCards, selectedMember]);
 
-  const canSubmit = Boolean(memberId) && selectedCards.length > 0 && assignStatus !== "loading";
+  const canSubmit =
+    Boolean(memberId) && selectedCards.some((c) => c.required) && assignStatus !== "loading";
 
   return {
     memberId,
@@ -428,6 +449,7 @@ export function useQuickAssign({
     updateCardSets,
     toggleCardTag,
     removeCard,
+    toggleRequired,
     addExercise,
     applyPreset,
 
@@ -675,10 +697,11 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-black text-slate-900">오늘 낼 운동</span>
               <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white">
-                {qa.selectedCards.length}/3
+                필수 {qa.selectedCards.filter((c) => c.required).length} · 선택{" "}
+                {qa.selectedCards.filter((c) => !c.required).length}
               </span>
             </div>
-            <span className="text-xs text-slate-400">좌우 [-/+] 세트 · 태그 탭</span>
+            <span className="text-xs text-slate-400">★ 필수 · 별표 없으면 건너뛰기 가능</span>
           </div>
 
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none snap-x">
@@ -712,10 +735,22 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                       <button
                         type="button"
                         onClick={() => qa.removeCard(card.id)}
-                        className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors active:scale-90"
+                        className="absolute top-1.5 left-1.5 flex size-6 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors active:scale-90"
                         aria-label="삭제"
                       >
                         <X className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => qa.toggleRequired(card.id)}
+                        aria-pressed={card.required}
+                        aria-label={card.required ? "필수 동작 (누르면 선택으로 변경)" : "선택 동작 (누르면 필수로 변경)"}
+                        className={cn(
+                          "absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-full transition-colors active:scale-90",
+                          card.required ? "bg-amber-400 text-slate-900" : "bg-black/60 text-white/80 hover:bg-black/80",
+                        )}
+                      >
+                        <Star className={cn("size-4", card.required && "fill-current")} />
                       </button>
                     </div>
 
@@ -782,7 +817,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
             </AnimatePresence>
 
             {/* 빈 슬롯 카드 */}
-            {qa.selectedCards.length < 3 && (
+            {qa.selectedCards.length < MAX_HOMEWORK_ITEMS && (
               <motion.div
                 layout
                 whileTap={{ scale: 0.96 }}
@@ -798,7 +833,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                   <Plus className="size-4 text-slate-600" />
                 </div>
                 <span className="text-xs font-bold text-slate-600 mt-1">동작 추가</span>
-                <span className="text-[10px] text-slate-400">최대 3개</span>
+                <span className="text-[10px] text-slate-400">최대 {MAX_HOMEWORK_ITEMS}개</span>
               </motion.div>
             )}
           </div>

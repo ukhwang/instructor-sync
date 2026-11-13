@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { CheckCircle2, Dumbbell, Loader2, Mic, Pause, Play, RotateCcw, Square, Volume2, VolumeX, WifiOff } from "lucide-react";
+import { CheckCircle2, Dumbbell, Loader2, Mic, Pause, Play, RotateCcw, Square, Star, Volume2, VolumeX, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { vibrate } from "@/lib/kakao-share";
 import { FEEDBACK_MOODS, PAIN_AREAS, type FeedbackMood, type Homework, type HomeworkItem, type Member, type PainArea } from "@/lib/types";
@@ -56,6 +56,8 @@ interface SessionState {
   /** 현재 수행할 세트(0-based) */
   setIndex: number;
   phase: Phase;
+  /** 회원이 건너뛴 선택 동작 id */
+  skipped: string[];
 }
 
 function sumSets(items: HomeworkItem[]): number {
@@ -121,6 +123,7 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
     index: 0,
     setIndex: 0,
     phase: { kind: "exercise" },
+    skipped: [],
   });
   const [now, setNow] = useState<number>(0);
   const { enqueue, flush, hasSyncError } = useSetLogQueue(onLogSet);
@@ -170,6 +173,20 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
     setState((prev) => ({ ...prev, stage: "feedback", phase: { kind: "exercise" } }));
   }, [currentItem, enqueue, homework.id, homework.token, items.length, state.index, state.phase.kind, state.setIndex, state.stage]);
 
+  /** 선택(★ 없음) 동작만 건너뛸 수 있다. 필수 동작은 건너뛸 수 없다. */
+  const skipItem = useCallback(() => {
+    if (state.stage !== "workout" || !currentItem || currentItem.requirement !== "optional") return;
+    vibrate(10);
+    const skippedId = currentItem.id;
+    setState((prev) => {
+      const skipped = prev.skipped.includes(skippedId) ? prev.skipped : [...prev.skipped, skippedId];
+      if (prev.index < items.length - 1) {
+        return { ...prev, skipped, index: prev.index + 1, setIndex: 0, phase: { kind: "exercise" } };
+      }
+      return { ...prev, skipped, stage: "feedback", phase: { kind: "exercise" } };
+    });
+  }, [currentItem, items.length, state.stage]);
+
   const skipRest = useCallback(() => {
     vibrate(10);
     setState((prev) => (prev.phase.kind === "rest" ? { ...prev, phase: { kind: "exercise" } } : prev));
@@ -203,14 +220,23 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
   /** 모든 세트를 끝낸 동작 id. 서버가 이 목록으로 완료/일부/못함을 판정한다. */
   const completedItemIds = useMemo<string[]>(() => {
     const done = state.stage === "workout" ? items.slice(0, state.index) : items;
-    return done.map((item) => item.id);
-  }, [items, state.index, state.stage]);
+    return done.filter((item) => !state.skipped.includes(item.id)).map((item) => item.id);
+  }, [items, state.index, state.skipped, state.stage]);
+
+  /** 실제로 수행한 세트 수 (건너뛴 동작 제외). 제출 기록용 — 진행 막대는 completedSets 를 쓴다. */
+  const performedSets = useMemo<number>(() => {
+    const done = state.stage === "workout" ? items.slice(0, state.index) : items;
+    const finished = done.filter((item) => !state.skipped.includes(item.id));
+    return sumSets(finished) + (state.stage === "workout" ? state.setIndex : 0);
+  }, [items, state.index, state.setIndex, state.skipped, state.stage]);
 
   return {
     items,
     totalSets,
     completedSets,
+    performedSets,
     completedItemIds,
+    skipItem,
     state,
     currentItem,
     completeSet,
@@ -484,7 +510,7 @@ export function MemberHomeworkClient({
       homeworkId: homework.id,
       requestId,
       completedItemIds: session.completedItemIds,
-      completedSets: session.completedSets,
+      completedSets: session.performedSets,
       totalSets: Math.max(1, session.totalSets),
       mood: feedback.mood,
       painAreas: feedback.painAreas,
@@ -624,6 +650,17 @@ export function MemberHomeworkClient({
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {session.currentItem.requirement === "optional" &&
+                !(coachOn && coach.display.status !== "idle") && (
+                  <button
+                    type="button"
+                    onClick={session.skipItem}
+                    className="mt-3 flex h-14 w-full items-center justify-center rounded-2xl text-lg font-semibold text-slate-500 transition-colors active:bg-slate-100"
+                  >
+                    이 운동은 건너뛸게요
+                  </button>
+                )}
             </div>
           </motion.section>
         )}
@@ -847,8 +884,16 @@ function ExerciseCard({
     <div>
       <ExerciseMedia item={item} compact={compact} />
 
-      <p className={cn("text-base font-semibold text-[#3182F6]", compact ? "mt-3" : "mt-5")}>
+      <p className={cn("flex items-center gap-2 text-base font-semibold text-[#3182F6]", compact ? "mt-3" : "mt-5")}>
         운동 {index + 1} / {total}
+        {item.requirement === "optional" ? (
+          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-sm font-bold text-slate-600">선택</span>
+        ) : (
+          <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-sm font-bold text-amber-700">
+            <Star className="size-3.5 fill-current" />
+            필수
+          </span>
+        )}
       </p>
       <h2 className="mt-1 text-[30px] font-bold leading-tight">{item.exerciseName}</h2>
       <p className="mt-2 text-xl font-semibold text-slate-700">

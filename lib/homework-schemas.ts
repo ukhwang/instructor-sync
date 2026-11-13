@@ -18,14 +18,16 @@ export const customExerciseItemSchema = z.object({
   reps: z.string().default("10회"),
   cue: z.string().optional().default("통증 없는 범위에서 천천히"),
   coachingTags: z.array(z.string()).optional(),
+  /** 별표(★) = 필수. false 면 회원이 건너뛰어도 되는 선택 동작 */
+  required: z.boolean().default(true),
   restSec: z.number().int().optional().default(30),
   gifUrl: z.string().optional(),
   posterUrl: z.string().optional(),
 });
 export type CustomExerciseItem = z.infer<typeof customExerciseItemSchema>;
 
-/** create_homework RPC 계약: 숙제 1건당 동작 1~3개 */
-export const MAX_HOMEWORK_ITEMS = 3;
+/** create_homework RPC 계약: 숙제 1건당 동작 1~20개, 필수(★) 1개 이상 */
+export const MAX_HOMEWORK_ITEMS = 20;
 
 export const assignHomeworkInputSchema = z
   .object({
@@ -39,6 +41,9 @@ export const assignHomeworkInputSchema = z
     customItems: z
       .array(customExerciseItemSchema)
       .max(MAX_HOMEWORK_ITEMS, { message: `운동은 한 번에 최대 ${MAX_HOMEWORK_ITEMS}개까지 보낼 수 있어요` })
+      .refine((items) => items.length === 0 || items.some((item) => item.required), {
+        message: "별표(★) 필수 동작을 1개 이상 남겨주세요",
+      })
       .optional(),
   })
   .refine(

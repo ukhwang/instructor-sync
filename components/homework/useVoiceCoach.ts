@@ -180,15 +180,19 @@ export function useVoiceCoach(input: UseVoiceCoachInput) {
     setDisplay((d) => ({ ...d, status: "running" }));
   }, [getSpeaker]);
 
+  const prevItemRef = useRef<number>(itemIndex);
+
   // 휴식이 끝나 다음 세트로 돌아오면 자동으로 "N번째 세트 시작!" 구령
   const prevPhaseRef = useRef<"exercise" | "rest">(phaseKind);
   useEffect(() => {
     const prev = prevPhaseRef.current;
     prevPhaseRef.current = phaseKind;
-    if (prev === "rest" && phaseKind === "exercise" && enabled && autoRef.current && stage === "workout") {
+    // 휴식 중 선택 동작을 건너뛰면 운동(index)이 바뀐다 → 자동 시작하지 않고 회원이 직접 시작
+    const sameItem = prevItemRef.current === itemIndex;
+    if (prev === "rest" && phaseKind === "exercise" && enabled && autoRef.current && stage === "workout" && sameItem) {
       startSet(false);
     }
-  }, [enabled, phaseKind, stage, startSet]);
+  }, [enabled, itemIndex, phaseKind, stage, startSet]);
 
   // 휴식 시작 안내 + 마지막 3초 카운트다운
   const restAnnouncedRef = useRef<string>("");
@@ -207,7 +211,6 @@ export function useVoiceCoach(input: UseVoiceCoachInput) {
   }, [enabled, getSpeaker, item, itemIndex, phaseKind, restRemainingSec, setIndex, stage]);
 
   // 운동이 바뀌면 자동 진행을 끊고 새 동작을 안내 (시작은 회원이 탭)
-  const prevItemRef = useRef<number>(itemIndex);
   useEffect(() => {
     if (prevItemRef.current === itemIndex) return;
     prevItemRef.current = itemIndex;

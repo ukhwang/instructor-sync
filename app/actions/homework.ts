@@ -72,6 +72,8 @@ interface PresetItem {
   reps: string;
   cue: string;
   restSec: number;
+  /** 생략하면 필수 */
+  required?: boolean;
 }
 
 const PRESET_ITEMS: Record<Exclude<RoutinePresetId, "repeat-last">, PresetItem[]> = {
@@ -118,6 +120,7 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
             reps: item.reps,
             cue: item.cue,
             restSec: item.restSec,
+            required: item.required,
           }))
         : PRESET_ITEMS[data.presetId && data.presetId !== "repeat-last" ? data.presetId : "spine-pelvis-5"];
 
@@ -143,7 +146,7 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
         target_sets: item.sets,
         target_reps: item.reps,
         rest_seconds: item.restSec,
-        requirement: "required",
+        requirement: item.required === false ? "optional" : "required",
       })),
     });
 
@@ -163,6 +166,7 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
       durationSec: null,
       restSec: item.restSec,
       cue: item.cue,
+      requirement: item.required === false ? "optional" : "required",
       ...resolveMedia(item.name),
     }));
 
