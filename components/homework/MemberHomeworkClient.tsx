@@ -1,13 +1,15 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { CheckCircle2, Dumbbell, Loader2, Mic, RotateCcw, Square, WifiOff } from "lucide-react";
+import { CheckCircle2, Dumbbell, Loader2, Mic, Pause, Play, RotateCcw, Square, Volume2, VolumeX, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { vibrate } from "@/lib/kakao-share";
 import { FEEDBACK_MOODS, PAIN_AREAS, type FeedbackMood, type Homework, type HomeworkItem, type Member, type PainArea } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getExerciseMedia } from "@/lib/exercise-media";
 import { createRequestId } from "@/lib/homework-assignment";
+import { ordinalLabel } from "@/lib/voice-coach/phrases";
+import { useVoiceCoach, type CoachDisplay } from "./useVoiceCoach";
 
 /* ────────────────────────────────────────────────────────────
  * 1. Zod Schemas (lib/homework-schemas 에서 일원화)
@@ -455,6 +457,18 @@ export function MemberHomeworkClient({
 }: MemberHomeworkClientProps) {
   const session = useHomeworkSession(homework, onLogSet);
   const voice = useVoiceMemo();
+  // 음성 코치(숫자 구령 + "N번째 세트 시작!")는 기본 켜짐. 끄면 기존 [세트 완료] 버튼으로 진행.
+  const [coachOn, setCoachOn] = useState<boolean>(true);
+  const coach = useVoiceCoach({
+    enabled: coachOn,
+    stage: session.state.stage,
+    itemIndex: session.state.index,
+    setIndex: session.state.setIndex,
+    item: session.currentItem,
+    phaseKind: session.state.phase.kind,
+    restRemainingSec: session.restRemainingSec,
+    onSetComplete: session.completeSet,
+  });
   // 이 화면 진입 1회당 고정 → 네트워크 재시도가 중복 제출이 되지 않는다.
   const [requestId] = useState<string>(() => createRequestId());
   const feedback = useFeedbackForm();
@@ -521,6 +535,28 @@ export function MemberHomeworkClient({
         <p className="mt-2 text-right text-base font-semibold tabular-nums text-slate-500">
           {session.completedSets} / {session.totalSets}세트
         </p>
+        {session.state.stage === "workout" && !(coachOn && coach.display.status !== "idle") && (
+          <button
+            type="button"
+            onClick={() => {
+              if (coachOn) coach.stop();
+              setCoachOn(!coachOn);
+            }}
+            aria-pressed={coachOn}
+            className={cn(
+              "mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 text-lg font-bold transition-colors active:scale-[0.98]",
+              coachOn ? "border-[#3182F6] bg-[#3182F6]/[0.07] text-[#3182F6]" : "border-slate-200 text-slate-500",
+            )}
+          >
+            {coachOn ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
+            {coachOn ? "음성 코치 켜짐 · 소리를 켜 주세요" : "음성 코치 꺼짐"}
+          </button>
+        )}
+        {coachOn && !coach.soundSupported && session.state.stage === "workout" && (
+          <p role="status" className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            이 기기에서는 소리 안내를 낼 수 없어요. 화면의 숫자를 보고 따라 해주세요.
+          </p>
+        )}
         {session.hasSyncError && (
           <p className="mt-2 flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">
             <WifiOff className="size-4 shrink-0" />
@@ -544,6 +580,7 @@ export function MemberHomeworkClient({
               index={session.state.index}
               total={session.items.length}
               doneSets={session.state.setIndex}
+              compact={coachOn && coach.display.status !== "idle"}
             />
 
             <div className="mt-auto pt-6">
@@ -571,9 +608,19 @@ export function MemberHomeworkClient({
                     exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <PulseButton onPress={session.completeSet}>
-                      {ctaLabel(session.currentItem, session.state.setIndex, session.state.index === session.items.length - 1)}
-                    </PulseButton>
+                    {coachOn ? (
+                      coach.display.status === "idle" ? (
+                        <PulseButton onPress={coach.startFromTap}>
+                          {ordinalLabel(session.state.setIndex + 1)} 세트 시작
+                        </PulseButton>
+                      ) : (
+                        <CoachPanel display={coach.display} onPause={coach.pause} onResume={coach.resume} />
+                      )
+                    ) : (
+                      <PulseButton onPress={session.completeSet}>
+                        {ctaLabel(session.currentItem, session.state.setIndex, session.state.index === session.items.length - 1)}
+                      </PulseButton>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -737,6 +784,40 @@ export function MemberHomeworkClient({
   );
 }
 
+function CoachPanel({
+  display,
+  onPause,
+  onResume,
+}: {
+  display: CoachDisplay;
+  onPause: () => void;
+  onResume: () => void;
+}) {
+  const paused = display.status === "paused";
+  const sideLabel = display.side === "left" ? "왼쪽" : display.side === "right" ? "오른쪽" : null;
+  const unit = display.kind === "hold" ? "초 남음" : `/ ${display.target}`;
+
+  return (
+    <div className="flex flex-col items-center" aria-live="polite">
+      {sideLabel && <p className="mb-1 text-xl font-bold text-[#3182F6]">{sideLabel}</p>}
+      <div className="flex items-baseline gap-2">
+        <span className="text-[80px] font-bold leading-none tabular-nums">
+          {display.preparing ? "준비" : display.value}
+        </span>
+        {!display.preparing && <span className="text-2xl font-semibold text-slate-500">{unit}</span>}
+      </div>
+      <button
+        type="button"
+        onClick={paused ? onResume : onPause}
+        className="mt-6 flex h-16 w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 text-xl font-bold text-slate-700 transition-transform duration-150 active:scale-[0.97]"
+      >
+        {paused ? <Play className="size-6" /> : <Pause className="size-6" />}
+        {paused ? "이어서 하기" : "잠깐 멈춤"}
+      </button>
+    </div>
+  );
+}
+
 function ctaLabel(item: HomeworkItem, setIndex: number, isLastItem: boolean): string {
   const setNumber = setIndex + 1;
   const sets = Math.max(1, item.sets ?? 1);
@@ -749,11 +830,14 @@ function ExerciseCard({
   index,
   total,
   doneSets,
+  compact = false,
 }: {
   item: HomeworkItem;
   index: number;
   total: number;
   doneSets: number;
+  /** 음성 코치 진행 중: 영상을 낮춰 큰 숫자가 한 화면에 보이게 한다 */
+  compact?: boolean;
 }) {
   const sets = Math.max(1, item.sets ?? 1);
   const amount =
@@ -761,9 +845,9 @@ function ExerciseCard({
 
   return (
     <div>
-      <ExerciseMedia item={item} />
+      <ExerciseMedia item={item} compact={compact} />
 
-      <p className="mt-5 text-base font-semibold text-[#3182F6]">
+      <p className={cn("text-base font-semibold text-[#3182F6]", compact ? "mt-3" : "mt-5")}>
         운동 {index + 1} / {total}
       </p>
       <h2 className="mt-1 text-[30px] font-bold leading-tight">{item.exerciseName}</h2>
@@ -771,7 +855,7 @@ function ExerciseCard({
         {amount ? `${amount} × ` : ""}
         {sets}세트
       </p>
-      {item.cue && <p className="mt-3 text-lg leading-relaxed text-slate-600">{item.cue}</p>}
+      {item.cue && !compact && <p className="mt-3 text-lg leading-relaxed text-slate-600">{item.cue}</p>}
 
       <div className="mt-5 flex gap-2.5" aria-label={`${sets}세트 중 ${doneSets}세트 완료`}>
         {Array.from({ length: sets }, (_, i) => (
@@ -788,7 +872,7 @@ function ExerciseCard({
   );
 }
 
-function ExerciseMedia({ item }: { item: HomeworkItem }) {
+function ExerciseMedia({ item, compact = false }: { item: HomeworkItem; compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // 동작이 바뀌면 오류 상태가 자동 초기화되도록 "어느 미디어에서 실패했는지"를 기억한다.
   const [failedSource, setFailedSource] = useState<string | null>(null);
@@ -828,7 +912,8 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
   }, [item.id, isVideo]);
 
   return (
-    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl bg-slate-900/60 border border-slate-800 shadow-inner flex items-center justify-center">
+    <div className={cn("relative w-full overflow-hidden rounded-3xl transition-all duration-300", compact ? "aspect-[16/9]" : "aspect-[4/3]",
+      "flex items-center justify-center border border-slate-800 bg-slate-900/60 shadow-inner")}>
       {isVideo ? (
         <video
           key={item.id}
