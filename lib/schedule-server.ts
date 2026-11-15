@@ -18,6 +18,21 @@ import {
 
 const HOMEWORK_LOOKBACK_DAYS = 60;
 
+type LessonWithMemberRow = LessonRow & { member: MemberRow | MemberRow[] | null };
+type SubmissionEmbed = Omit<SubmissionRow, "homework_id">;
+type HomeworkWithSubmissionRow = HomeworkRow & { submission: SubmissionEmbed | SubmissionEmbed[] | null };
+
+function single<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+/**
+ * 주간 보드 조회: 왕복 2회.
+ *  1) 수업 + 회원(복합 FK 임베드)
+ *  2) 해당 회원들의 최근 숙제 + 제출(1:1 임베드)
+ * 2)는 1)의 회원 목록에 의존하므로 직렬이 최소다. (이전: 수업 → 회원/숙제 → 제출 3회)
+ */
 export async function getWeekBoard(weekStart: string, now: Date = new Date()): Promise<WeekBoard> {
   const supabase = await createClient();
   const rangeStart = `${weekStart}T00:00:00+09:00`;
@@ -25,53 +40,60 @@ export async function getWeekBoard(weekStart: string, now: Date = new Date()): P
 
   const lessonsRes = await supabase
     .from("lessons")
-    .select("id, member_id, starts_at, ends_at, status")
+    .select("id, member_id, starts_at, ends_at, status, member:members(id, name, package_remaining, package_total)")
     .gte("starts_at", rangeStart)
     .lt("starts_at", rangeEnd)
     .neq("status", "cancelled")
     .order("starts_at", { ascending: true });
   if (lessonsRes.error) throw asDataAccessError("lessons.week", lessonsRes.error);
-  const lessons = (lessonsRes.data ?? []) as LessonRow[];
+  const lessonRows = (lessonsRes.data ?? []) as unknown as LessonWithMemberRow[];
 
+  const lessons: LessonRow[] = lessonRows.map(({ id, member_id, starts_at, ends_at, status }) => ({
+    id,
+    member_id,
+    starts_at,
+    ends_at,
+    status,
+  }));
+  const membersById = new Map<string, MemberRow>();
+  for (const row of lessonRows) {
+    const member = single(row.member);
+    if (member) membersById.set(member.id, member);
+  }
   const memberIds = [...new Set(lessons.map((lesson) => lesson.member_id))];
   if (memberIds.length === 0) {
     return assembleWeekBoard({ weekStart, now, lessons, members: [], homeworks: [], submissions: [] });
   }
 
   const lookbackStart = `${addDays(weekStart, -HOMEWORK_LOOKBACK_DAYS)}T00:00:00+09:00`;
-  const [membersRes, homeworkRes] = await Promise.all([
-    supabase.from("members").select("id, name, package_remaining, package_total").in("id", memberIds),
-    supabase
-      .from("homework")
-      .select("id, member_id, created_at, status, revoked_at")
-      .in("member_id", memberIds)
-      .gte("created_at", lookbackStart)
-      .lt("created_at", rangeEnd)
-      .order("created_at", { ascending: false })
-      .limit(500),
-  ]);
-  if (membersRes.error) throw asDataAccessError("members.forWeek", membersRes.error);
+  const homeworkRes = await supabase
+    .from("homework")
+    .select("id, member_id, created_at, status, revoked_at, submission:homework_submissions(submitted_at, snapshot)")
+    .in("member_id", memberIds)
+    .gte("created_at", lookbackStart)
+    .lt("created_at", rangeEnd)
+    .order("created_at", { ascending: false })
+    .limit(500);
   if (homeworkRes.error) throw asDataAccessError("homework.forWeek", homeworkRes.error);
-  const homeworks = (homeworkRes.data ?? []) as HomeworkRow[];
+  const homeworkRows = (homeworkRes.data ?? []) as unknown as HomeworkWithSubmissionRow[];
 
-  let submissions: SubmissionRow[] = [];
-  if (homeworks.length > 0) {
-    const submissionsRes = await supabase
-      .from("homework_submissions")
-      .select("homework_id, submitted_at, snapshot")
-      .in(
-        "homework_id",
-        homeworks.map((homework) => homework.id),
-      );
-    if (submissionsRes.error) throw asDataAccessError("submissions.forWeek", submissionsRes.error);
-    submissions = (submissionsRes.data ?? []) as SubmissionRow[];
-  }
+  const homeworks: HomeworkRow[] = homeworkRows.map(({ id, member_id, created_at, status, revoked_at }) => ({
+    id,
+    member_id,
+    created_at,
+    status,
+    revoked_at,
+  }));
+  const submissions: SubmissionRow[] = homeworkRows.flatMap((row) => {
+    const submission = single(row.submission);
+    return submission ? [{ homework_id: row.id, submitted_at: submission.submitted_at, snapshot: submission.snapshot }] : [];
+  });
 
   return assembleWeekBoard({
     weekStart,
     now,
     lessons,
-    members: (membersRes.data ?? []) as MemberRow[],
+    members: [...membersById.values()],
     homeworks,
     submissions,
   });
