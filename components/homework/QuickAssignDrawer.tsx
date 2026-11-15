@@ -691,6 +691,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                   animate={{ opacity: 1, scale: 1, x: 0 }}
                   exit={{ opacity: 0, scale: 0.85, x: -20 }}
                   transition={{ type: "spring", damping: 26, stiffness: 320, mass: 0.8 }}
+                  data-testid="homework-card"
                   className="w-52 shrink-0 snap-start rounded-2xl border border-slate-200 bg-white p-3 shadow-xs flex flex-col justify-between transition-shadow will-change-transform"
                 >
                   <div>
@@ -764,6 +765,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                             key={tag}
                             type="button"
                             onClick={() => qa.toggleCardTag(card.id, tag)}
+                            aria-pressed={active}
                             className={cn(
                               "rounded-md px-1.5 py-0.5 text-[10px] font-bold active:scale-90 transition-all duration-100",
                               active

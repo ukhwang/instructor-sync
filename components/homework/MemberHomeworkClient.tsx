@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { vibrate } from "@/lib/kakao-share";
 import { FEEDBACK_MOODS, PAIN_AREAS, type FeedbackMood, type Homework, type HomeworkItem, type Member, type PainArea } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { getExerciseMedia } from "@/lib/exercise-media";
 import { createRequestId } from "@/lib/homework-assignment";
 
 /* ────────────────────────────────────────────────────────────
@@ -625,11 +624,10 @@ export function MemberHomeworkClient({
               {feedback.mood !== null && feedback.mood !== "good" && (
                 <motion.div
                   key="pain"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.25, ease: "easeOut" }}
-                  className="overflow-hidden"
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
                 >
                   <p className="mb-3 mt-7 text-xl font-bold">불편한 곳을 눌러주세요</p>
                   <div className="grid grid-cols-4 gap-2.5">
@@ -642,7 +640,7 @@ export function MemberHomeworkClient({
                           aria-pressed={active}
                           onClick={() => feedback.togglePainArea(area)}
                           className={cn(
-                            "h-14 rounded-2xl border-2 text-lg font-bold transition-all duration-150 active:scale-95",
+                            "h-16 rounded-2xl border-2 text-lg font-bold transition-[transform,color,background-color,border-color] duration-150 active:scale-95",
                             active ? "border-rose-500 bg-rose-50 text-rose-600" : "border-slate-200 text-slate-700",
                           )}
                         >
@@ -666,7 +664,7 @@ export function MemberHomeworkClient({
                               aria-label={`${score}점`}
                               onClick={() => feedback.selectPainScore(score)}
                               className={cn(
-                                "h-12 rounded-xl border-2 text-lg font-bold tabular-nums transition-all duration-150 active:scale-95",
+                                "h-16 rounded-xl border-2 text-lg font-bold tabular-nums transition-[transform,color,background-color,border-color] duration-150 active:scale-95",
                                 active ? "border-rose-500 bg-rose-500 text-white" : "border-slate-200 text-slate-700",
                               )}
                             >
@@ -793,9 +791,9 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
   // 동작이 바뀌면 오류 상태가 자동 초기화되도록 "어느 미디어에서 실패했는지"를 기억한다.
   const [failedSource, setFailedSource] = useState<string | null>(null);
 
-  // item.mediaUrl이 없더라도 클라이언트에서 운동명 기반 GitHub 오픈소스 미디어 자동 폴백
-  const fallbackMedia = item.mediaUrl ? null : getExerciseMedia(item.exerciseName ?? "");
-  const mediaUrl = item.mediaUrl || fallbackMedia?.video || fallbackMedia?.animatedFallback || fallbackMedia?.poster;
+  // 미디어는 서버(app/h/[token]/page.tsx)가 운동명·스냅샷으로 이미 해석해 내려준다.
+  // 같은 해석을 브라우저에서 반복하면 1,334종 마스터 DB 가 회원 번들에 실려 첫 로딩이 느려지므로 하지 않는다.
+  const mediaUrl = item.mediaUrl ?? undefined;
   const mediaSourceKey = `${item.id}|${mediaUrl ?? ""}`;
   const loadError = failedSource === mediaSourceKey;
   const isVideo = Boolean(
@@ -815,7 +813,7 @@ function ExerciseMedia({ item }: { item: HomeworkItem }) {
         mediaUrl.includes("github") ||
         mediaUrl.includes("jsdelivr"))
   );
-  const posterUrl = item.posterUrl || fallbackMedia?.poster;
+  const posterUrl = item.posterUrl;
 
   useEffect(() => {
     const video = videoRef.current;

@@ -230,11 +230,10 @@ function LessonDetailBody({
         {editingTime && lesson.status === "scheduled" && (
           <motion.section
             key="reschedule"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden"
             aria-label="시간 변경"
           >
             <RescheduleForm
