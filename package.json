@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "verify": "node --test && tsc --noEmit && eslint",
+    "test:e2e": "playwright test",
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
@@ -24,6 +25,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "0.45.2",
+    "geist": "^1.9.2",
     "lucide-react": "^1.7.0",
     "motion": "^12.4.7",
     "next": "16.2.2",
@@ -41,6 +43,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "8.23.1",
