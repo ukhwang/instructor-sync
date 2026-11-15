@@ -50,3 +50,11 @@ next-env.d.ts
 /data/exercise-catalog/.local/
 
 .vercel
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+
+# E2E 로컬 스택 산출물
+/e2e/local-stack/.stack/
