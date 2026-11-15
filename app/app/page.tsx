@@ -1,10 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { getMembers, getAllHomeworks } from "@/lib/db-server";
 import { getSeoulDateTimeString } from "@/lib/token";
 import { buildCareQueue, CARE_QUEUE_LABELS } from "@/lib/care-queue";
 import { QuickAssignTrigger } from "@/components/homework/QuickAssignTrigger";
-import { getMemberBriefing } from "@/lib/briefing/service";
-import { SessionBriefingCard } from "@/components/briefing/SessionBriefingCard";
+import { DashboardBriefingSection, DashboardBriefingSkeleton } from "@/components/briefing/DashboardBriefingSection";
 import { getTodayLessons } from "@/lib/schedule-server";
 import type { LessonBlock } from "@/lib/schedule-schemas";
 import { BADGE_META, formatTime } from "@/lib/schedule-display";
@@ -19,18 +19,21 @@ function pickNextLesson(lessons: LessonBlock[]): LessonBlock | null {
 export default async function TrainerDashboardPage() {
   // These authenticated Supabase reads are independent. Starting them together
   // removes one network round trip from the dashboard's server-render time.
-  // 스케줄 조회 실패(마이그레이션 미적용 등)는 대시보드를 막지 않는다.
+  // 스케줄 조회 실패(마이그레이션 미적용 등)는 대시보드를 막지 않되, 로그로 남긴다.
   const [members, homeworks, todayLessons] = await Promise.all([
     getMembers(),
     getAllHomeworks(),
-    getTodayLessons().catch((): LessonBlock[] => []),
+    getTodayLessons().catch((error: unknown): LessonBlock[] => {
+      console.error("[dashboard] 오늘 수업 조회 실패", error instanceof Error ? error.message : "unknown");
+      return [];
+    }),
   ]);
   const careQueue = buildCareQueue(members, homeworks);
 
   // 3초 브리핑 대상: 오늘 아직 끝나지 않은 다음 수업 회원 → 없으면 케어 큐 1순위
   const nextLesson = pickNextLesson(todayLessons);
   const primaryMemberId = nextLesson?.memberId ?? careQueue[0]?.member?.id ?? members[0]?.id ?? null;
-  const primaryBriefing = primaryMemberId ? await getMemberBriefing(primaryMemberId) : null;
+  const briefingTitle = nextLesson ? `${formatTime(nextLesson.startsAt)} 수업 3초 브리핑` : "수업 전 3초 브리핑";
 
   // Calculate Funnel Metrics
   const totalMembers = members.length;
@@ -115,19 +118,11 @@ export default async function TrainerDashboardPage() {
         )}
       </section>
 
-      {/* 3초 AI 수업 브리핑 카드 */}
-      {primaryBriefing && (
-        <section aria-label="수업 전 3초 AI 브리핑" className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold tracking-tight">
-              {nextLesson ? `${formatTime(nextLesson.startsAt)} 수업 3초 브리핑` : "수업 전 3초 브리핑"}
-            </h2>
-            <span className="text-xs font-mono text-neutral-500">
-              {primaryBriefing.source === "live" ? "회원 기록 기반" : "샘플 데이터"}
-            </span>
-          </div>
-          <SessionBriefingCard briefing={primaryBriefing} variant="dashboard" />
-        </section>
+      {/* 3초 AI 수업 브리핑 카드: 본문과 분리해 스트리밍 (워터폴 제거) */}
+      {primaryMemberId && (
+        <Suspense key={primaryMemberId} fallback={<DashboardBriefingSkeleton title={briefingTitle} />}>
+          <DashboardBriefingSection memberId={primaryMemberId} title={briefingTitle} />
+        </Suspense>
       )}
 
       {/* Funnel Metrics Grid */}

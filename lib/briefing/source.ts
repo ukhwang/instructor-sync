@@ -8,6 +8,7 @@ import {
 } from './types';
 import { parseFeedbackNote } from '@/lib/feedback-note';
 import { summarizeSubmission } from '@/lib/schedule-board';
+import { asDataAccessError } from '@/lib/data-access-error';
 
 /**
  * ⚠️ 이 파일이 기존 DB 와 맞닿는 유일한 지점이다.
@@ -90,52 +91,48 @@ function toFeedbackInput(submittedAt: string, rawSnapshot: unknown): FeedbackInp
 
 /**
  * 회원의 가장 최근 피드백 1건을 조회한다.
- * - 회원을 찾지 못하면 null
- * - 조회 오류는 null (호출 측이 source='fallback' 으로 표시)
+ * - 회원을 찾지 못하면(다른 센터 회원 포함, RLS) null
+ * - 조회 오류는 DataAccessError 로 던진다. 호출 측이 샘플로 위장하지 않고 실패를 보여준다.
+ * - 회원·제출 조회는 서로 독립이므로 병렬로 실행한다 (왕복 1회).
  */
 export async function fetchRecentFeedback(
   memberId: string,
 ): Promise<RecentFeedbackResult | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return null;
+    throw asDataAccessError('briefing.config');
   }
 
-  try {
-    const supabase = await createClient();
+  const supabase = await createClient();
 
-    const memberRes = await supabase
-      .from(MEMBERS_TABLE)
-      .select('id, name')
-      .eq('id', memberId)
-      .maybeSingle();
-    if (memberRes.error || !memberRes.data) return null;
-
-    const member = MemberRowSchema.safeParse(memberRes.data);
-    if (!member.success) return null;
-
-    const submissionRes = await supabase
+  const [memberRes, submissionRes] = await Promise.all([
+    supabase.from(MEMBERS_TABLE).select('id, name').eq('id', memberId).maybeSingle(),
+    supabase
       .from(SUBMISSIONS_TABLE)
       .select('submitted_at, snapshot, homework!inner(member_id)')
       .eq('homework.member_id', memberId)
       .order('submitted_at', { ascending: false })
       .limit(1)
-      .maybeSingle();
-    if (submissionRes.error) {
-      console.error('[briefing] 제출 조회 실패', submissionRes.error.code ?? '', submissionRes.error.message);
-      return null;
-    }
-    if (!submissionRes.data) {
-      return { memberName: member.data.name, feedback: null };
-    }
+      .maybeSingle(),
+  ]);
+  if (memberRes.error) throw asDataAccessError('briefing.member', memberRes.error);
+  if (!memberRes.data) return null;
 
-    const row = SubmissionRowSchema.safeParse(submissionRes.data);
-    if (!row.success) return { memberName: member.data.name, feedback: null };
+  const member = MemberRowSchema.safeParse(memberRes.data);
+  if (!member.success) return null;
 
-    return {
-      memberName: member.data.name,
-      feedback: toFeedbackInput(row.data.submitted_at, row.data.snapshot),
-    };
-  } catch {
-    return null;
+  if (submissionRes.error) {
+    console.error('[briefing] 제출 조회 실패', submissionRes.error.code ?? '', submissionRes.error.message);
+    throw asDataAccessError('briefing.submission', submissionRes.error);
   }
+  if (!submissionRes.data) {
+    return { memberName: member.data.name, feedback: null };
+  }
+
+  const row = SubmissionRowSchema.safeParse(submissionRes.data);
+  if (!row.success) return { memberName: member.data.name, feedback: null };
+
+  return {
+    memberName: member.data.name,
+    feedback: toFeedbackInput(row.data.submitted_at, row.data.snapshot),
+  };
 }
