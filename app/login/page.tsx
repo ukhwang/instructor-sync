@@ -157,6 +157,17 @@ export default function LoginPage() {
             </div>
           )}
         </div>
+
+        {/* 로그인 없이 체험: DB·인증과 무관한 클라이언트 샌드박스(/demo). 프로덕션에서도 항상 노출. */}
+        <Link
+          href="/demo"
+          className="mt-4 flex min-h-16 w-full flex-col items-center justify-center gap-0.5 rounded-[var(--ui-radius-md)] border-2 border-black bg-white px-4 py-3 text-center transition-transform active:scale-[0.98]"
+        >
+          <span className="text-base font-black">로그인 없이 1분 체험하기</span>
+          <span className="text-xs font-bold text-neutral-600">
+            샘플 데이터로 원장 화면을 바로 체험합니다 · 저장되지 않음
+          </span>
+        </Link>
       </div>
     </div>
   );
