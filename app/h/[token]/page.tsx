@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { openHomeworkRpc } from "@/lib/db-server";
+import { isPublicDemoToken, openHomeworkRpc } from "@/lib/db-server";
 import { MemberHomeworkContainer } from "./MemberHomeworkContainer";
 import type { Homework, HomeworkItem } from "@/lib/types";
 import { COPY } from "@/lib/copy";
@@ -21,15 +21,22 @@ export const dynamic = "force-dynamic";
 
 export default async function MemberHomeworkPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ name?: string | string[] }>;
 }) {
   const resolvedParams = await params;
   const token = resolvedParams.token;
+  const query = await searchParams;
 
   // 공개 데모 토큰(정확히 일치)은 openHomeworkRpc 가 DB 없이 샘플을 돌려준다.
   // 그 외 토큰은 DB 판정(만료·회수 포함)만 신뢰한다.
   const result = await openHomeworkRpc(token);
+
+  // 체험 모드에서 숙제를 낸 회원 이름을 이어 준다. 데모 토큰에서만, 표시 이름만 바꾼다.
+  const requestedName = typeof query.name === "string" ? query.name.trim() : "";
+  const demoName = isPublicDemoToken(token) && /^[가-힣A-Za-z]{1,10}$/.test(requestedName) ? requestedName : null;
 
   if (!result.success) {
     let title: string = COPY.MEMBER.NOT_FOUND_TITLE;
@@ -59,6 +66,9 @@ export default async function MemberHomeworkPage({
     );
   }
 
+  // 데모 토큰에서 받은 이름이 있으면 그것을, 아니면 DB가 준 이름을 쓴다 (표시 전용).
+  const displayName = demoName ?? result.member?.name ?? "회원";
+
   const items: HomeworkItem[] = (result.items || []).map((it, idx) => {
     const name = it.name ?? "운동";
     const source = { name, cue: it.cue ?? null, exercise_snapshot: it.exercise_snapshot ?? null };
@@ -86,7 +96,7 @@ export default async function MemberHomeworkPage({
   const homeworkData: Homework = {
     id: result.homework!.id,
     memberId: result.member?.id || "demo-member",
-    title: `${result.member?.name || "회원"} 님의 맞춤 운동숙제`,
+    title: `${displayName} 님의 맞춤 운동숙제`,
     why: result.homework!.why || "오늘 수업의 효과를 극대화하기 위한 숙제입니다.",
     token: result.homework!.token || token,
     status: result.homework!.status || "sent",
@@ -95,7 +105,7 @@ export default async function MemberHomeworkPage({
     dueAt: result.homework!.token_expires_at,
     member: {
       id: result.member?.id || "demo-member",
-      name: result.member?.name || "회원",
+      name: displayName,
       phoneLast4: "0000",
       ptSessionCount: 1,
       nextSessionAt: null,
@@ -110,7 +120,7 @@ export default async function MemberHomeworkPage({
           homework={homeworkData}
           member={{
             id: result.member?.id || "demo-member",
-            name: result.member?.name || "회원",
+            name: displayName,
           }}
         />
       </div>

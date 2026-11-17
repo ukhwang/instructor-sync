@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { QuickAssignDrawer } from "@/components/homework/QuickAssignDrawer";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { DEMO_MEMBER_HOMEWORK_PATH, DEMO_REPORT_PATH } from "@/lib/demo-seed";
+import { DEMO_MEMBER_HOMEWORK_PATH, DEMO_REPORT_PATH, demoMemberHomeworkPath } from "@/lib/demo-seed";
 import { copyToClipboard, toAbsoluteUrl, vibrate } from "@/lib/kakao-share";
 import type { Homework } from "@/lib/types";
 
@@ -29,7 +29,7 @@ function displayName(name: string): string {
 }
 
 export function buildDemoKakaoText(memberName: string, homework: Homework): string {
-  const url = toAbsoluteUrl(DEMO_MEMBER_HOMEWORK_PATH);
+  const url = toAbsoluteUrl(demoMemberHomeworkPath(memberName));
   const lines = (homework.items ?? []).map(
     (item, index) => `${index + 1}. ${displayName(item.name ?? "운동")} ${item.target_sets ?? 3}세트`,
   );
@@ -117,7 +117,7 @@ export function DemoAssignLayer({ target, onClose }: { target: DemoAssignTarget 
             </button>
             <div className="grid grid-cols-2 gap-2.5">
               <a
-                href={DEMO_MEMBER_HOMEWORK_PATH}
+                href={shared ? demoMemberHomeworkPath(shared.memberName) : DEMO_MEMBER_HOMEWORK_PATH}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => vibrate(8)}

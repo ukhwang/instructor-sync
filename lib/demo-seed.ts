@@ -24,6 +24,14 @@ import type { Homework, HomeworkItem, Member } from "./types";
 export const DEMO_HOMEWORK_TOKEN = "demo-token";
 export const DEMO_REPORT_PATH = "/report/sample";
 export const DEMO_MEMBER_HOMEWORK_PATH = `/h/${DEMO_HOMEWORK_TOKEN}`;
+
+/**
+ * 체험에서 숙제를 낸 회원 이름을 회원 화면에 그대로 이어 준다.
+ * 데모 토큰에서만 이름 표시에 쓰이고, DB 조회·저장과는 무관하다.
+ */
+export function demoMemberHomeworkPath(memberName: string): string {
+  return `${DEMO_MEMBER_HOMEWORK_PATH}?name=${encodeURIComponent(memberName)}`;
+}
 export const DEMO_LESSON_DURATION_MIN = 50;
 /** 데모 수업 시작 시각 후보 (KST 분): 10:00 · 11:00 · 14:00 · 19:00 */
 export const DEMO_LESSON_SLOTS = [600, 660, 840, 1140] as const;
