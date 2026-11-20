@@ -2,8 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule } from './load-module.mjs';
 
+// The browser calls Server Actions now; `rpc(name, input)` stands in for the action transport.
 function client(rpc) {
-  return loadModule('lib/member-progress-data.ts', { '@/lib/supabase/client': { createClient: () => ({ rpc }) } });
+  const action = (name) => async (input) => {
+    const response = await rpc(name, input);
+    if (response.error) return { ok: false, code: 'DB_UNAVAILABLE', message: response.error.message };
+    return { ok: true, data: response.data };
+  };
+  return loadModule('lib/member-progress-data.ts', {
+    '@/app/actions/data': {
+      createProgressGoalAction: action('create_member_progress_goal'),
+      recordProgressObservationAction: action('record_member_progress_observation'),
+      getMemberProgressAction: action('get_member_progress'),
+    },
+  });
 }
 
 test('response loss remains retryable and the same observation request preserves zero and exact payload', async () => {
@@ -17,8 +29,8 @@ test('response loss remains retryable and the same observation request preserves
   assert.equal((await db.recordMemberProgressObservation(input)).retryable, true);
   assert.equal((await db.recordMemberProgressObservation(input)).success, true);
   assert.deepEqual(calls[0], calls[1]);
-  assert.equal(calls[1][1].p_value, 0);
-  assert.equal(calls[1][1].p_actor, 'trainer');
+  assert.equal(calls[1][1].value, 0);
+  assert.equal(calls[1][1].actor, 'trainer');
 });
 
 test('confirmed validation rejection is distinct from an unknown transport outcome', async () => {

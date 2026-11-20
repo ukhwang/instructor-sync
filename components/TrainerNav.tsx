@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/lib/auth-client";
 
 export function TrainerNav() {
   const pathname = usePathname();
   const router = useRouter();
   const handleSignOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
+    await signOut();
+    router.replace("/login");
+    router.refresh();
   };
 
   const navItems = [

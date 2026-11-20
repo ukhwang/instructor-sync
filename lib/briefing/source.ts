@@ -1,6 +1,8 @@
 import 'server-only';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { requireTrainer } from '@/lib/server/auth/session';
+import { getServerEnv } from '@/lib/server/env';
+import { getBriefingSource } from '@/lib/server/db/repositories/briefing';
 import {
   FeedbackInputSchema,
   PainAreaSchema,
@@ -13,11 +15,8 @@ import { asDataAccessError } from '@/lib/data-access-error';
 /**
  * ⚠️ 이 파일이 기존 DB 와 맞닿는 유일한 지점이다.
  * 회원 피드백은 homework_submissions.snapshot(불변) + note 규약(lib/feedback-note.ts)에서 읽는다.
- * 조회는 로그인한 강사의 세션(RLS)으로 실행되므로 다른 센터 회원은 조회되지 않는다.
+ * 조회는 세션에서 확인한 trainerId 로 스코프되므로 다른 센터 회원은 조회되지 않는다.
  */
-const MEMBERS_TABLE = 'members';
-const SUBMISSIONS_TABLE = 'homework_submissions';
-
 const MemberRowSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
@@ -98,39 +97,21 @@ function toFeedbackInput(submittedAt: string, rawSnapshot: unknown): FeedbackInp
 export async function fetchRecentFeedback(
   memberId: string,
 ): Promise<RecentFeedbackResult | null> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    throw asDataAccessError('briefing.config');
+  const { trainerId } = await requireTrainer();
+  let rows: Awaited<ReturnType<typeof getBriefingSource>>;
+  try {
+    const env = await getServerEnv();
+    rows = await getBriefingSource(env.DB, trainerId, memberId);
+  } catch (error) {
+    console.error('[briefing] 조회 실패', error instanceof Error ? error.message.slice(0, 200) : 'unknown');
+    throw asDataAccessError('briefing.read', error);
   }
-
-  const supabase = await createClient();
-
-  const [memberRes, submissionRes] = await Promise.all([
-    supabase.from(MEMBERS_TABLE).select('id, name').eq('id', memberId).maybeSingle(),
-    supabase
-      .from(SUBMISSIONS_TABLE)
-      .select('submitted_at, snapshot, homework!inner(member_id)')
-      .eq('homework.member_id', memberId)
-      .order('submitted_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-  if (memberRes.error) throw asDataAccessError('briefing.member', memberRes.error);
-  if (!memberRes.data) return null;
-
-  const member = MemberRowSchema.safeParse(memberRes.data);
+  if (!rows.member) return null;
+  const member = MemberRowSchema.safeParse(rows.member);
   if (!member.success) return null;
-
-  if (submissionRes.error) {
-    console.error('[briefing] 제출 조회 실패', submissionRes.error.code ?? '', submissionRes.error.message);
-    throw asDataAccessError('briefing.submission', submissionRes.error);
-  }
-  if (!submissionRes.data) {
-    return { memberName: member.data.name, feedback: null };
-  }
-
-  const row = SubmissionRowSchema.safeParse(submissionRes.data);
+  if (!rows.latestSubmission) return { memberName: member.data.name, feedback: null };
+  const row = SubmissionRowSchema.safeParse(rows.latestSubmission);
   if (!row.success) return { memberName: member.data.name, feedback: null };
-
   return {
     memberName: member.data.name,
     feedback: toFeedbackInput(row.data.submitted_at, row.data.snapshot),

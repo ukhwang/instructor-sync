@@ -7,10 +7,6 @@ export class DataAccessError extends Error {
   }
 }
 
-export function isNotFoundDatabaseError(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "PGRST116");
-}
-
 export function asDataAccessError(operation: string, error?: unknown): DataAccessError {
   if (error instanceof DataAccessError) return error;
   return new DataAccessError(operation);

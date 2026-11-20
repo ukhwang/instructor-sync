@@ -6,7 +6,8 @@
  * - 재활 34종은 rehab-db.ts 원본을 그대로 import 한다 (한국어 명칭·세트/횟수·큐·코칭 태그 100% 보존).
  *   여기서는 GIF/포스터만 GIF 육안 대조 결과로 교정한다(REHAB_MEDIA).
  * - 헬스 DB는 문자열 튜플(ROWS)로 압축 저장하고, 첫 사용 시 한 번만 객체로 펼친다(lazy hydrate).
- * - 동작 설명(약 1MB)은 master-db.instructions.json 으로 분리해 loadInstruction()이 필요할 때만 동적 import 한다.
+ * - 동작 설명(약 0.6MB)은 public/data/exercise-instructions.v1.json 정적 에셋으로 분리해 loadInstruction()이 필요할 때만 fetch 한다
+ *   (Cloudflare Worker 번들 크기 한도 밖, CDN 캐시).
  *   → 이 모듈 자체는 클라이언트 번들에 넣어도 gzip 기준 수십 KB 수준.
  * - 검색은 1,334건 선형 스캔 + 사전 정규화 키(초성 포함) 방식이라 키 입력마다 1ms 안팎.
  */
@@ -331,12 +332,33 @@ export function toPickerItem(item: MasterExercise): ExercisePickerItem {
   };
 }
 
-/** 동작 설명은 별도 청크로 지연 로딩 (재활은 원본 instruction 즉시 반환) */
-export async function loadInstruction(id: string): Promise<string | null> {
+/** 동작 설명 테이블의 정적 에셋 경로 (Worker 번들 밖, Cache-Control immutable 로 CDN 캐시). */
+export const EXERCISE_INSTRUCTIONS_URL = "/data/exercise-instructions.v1.json";
+
+type InstructionTable = Record<string, string>;
+let instructionTable: Promise<InstructionTable> | null = null;
+
+function fetchInstructionTable(): Promise<InstructionTable> {
+  instructionTable ??= fetch(EXERCISE_INSTRUCTIONS_URL)
+    .then((response) => {
+      if (!response.ok) throw new Error(`instructions ${response.status}`);
+      return response.json() as Promise<InstructionTable>;
+    })
+    .catch((error: unknown) => {
+      instructionTable = null; // 다음 호출에서 재시도
+      throw error;
+    });
+  return instructionTable;
+}
+
+/** 동작 설명은 정적 JSON 에셋에서 지연 로딩 (재활은 원본 instruction 즉시 반환) */
+export async function loadInstruction(
+  id: string,
+  loadTable: () => Promise<InstructionTable> = fetchInstructionTable,
+): Promise<string | null> {
   const item = getExerciseById(id);
   if (!item) return null;
   if (item.rehab) return item.rehab.instruction;
-  const mod = await import("./master-db.instructions.json");
-  const table = (mod.default ?? mod) as Record<string, string>;
+  const table = await loadTable();
   return table[id] ?? null;
 }

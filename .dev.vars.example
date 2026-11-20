@@ -1,0 +1,11 @@
+# Local secrets for `next dev` / `wrangler dev` / `opennextjs-cloudflare preview`.
+# Copy to .dev.vars (gitignored) and fill in. Production values go through
+# `wrangler secret put <NAME>` — never commit real values.
+
+# >= 32 random chars. Signs session cookies and derives the homework-link sealing key.
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
+
+# Public origin used by Better Auth (cookies, trusted origin).
+BETTER_AUTH_URL=http://localhost:8787
+NEXT_PUBLIC_APP_URL=http://localhost:8787

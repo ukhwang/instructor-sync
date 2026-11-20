@@ -25,7 +25,7 @@ test('draft and archived exercise content is neither searched nor selected by id
 });
 
 test('provider combines published DB records with legacy seed and surfaces loading failure', async () => {
-  const { loadExerciseRecords } = loadModule('lib/exercises/provider.ts', { '@/lib/supabase/client': {} });
+  const { loadExerciseRecords } = loadModule('lib/exercises/provider.ts', { '@/app/actions/data': {} });
   const matching = { ...record, name: seedRecords[0].name };
   const loaded = await loadExerciseRecords({ load: async () => [matching, { ...matching, content_version: 2 }, { ...record, name: 'Draft', status: 'draft' }] });
   assert.equal(loaded.filter((entry) => entry.name === matching.name).length, 1);

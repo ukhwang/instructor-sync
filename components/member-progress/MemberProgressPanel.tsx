@@ -73,6 +73,8 @@ function ProgressEditor({ memberId }: { memberId: string }) {
       if (stored) {
         const request = JSON.parse(stored) as Pending;
         if (["create", "reassessment", "correction"].includes(request.kind) && typeof request.input?.request_id === "string") {
+          // Restoring an unconfirmed request from sessionStorage (external store) after mount, so SSR markup matches.
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional external-store sync
           setPending(request);
           const input = request.input;
           const draft: MeasurementDraft = { measuredOn: input.measured_on, measured: input.value != null, value: input.value == null ? "" : String(input.value), reason: input.unmeasured_reason || "", source: input.source, memo: input.memo || "" };

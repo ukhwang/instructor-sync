@@ -135,3 +135,19 @@ export function parseFeedbackNote(note: string | null | undefined): ParsedFeedba
   }
   return result;
 }
+
+/**
+ * Public (token) responses must not carry the member's free-text memo (audit NV-1).
+ * Re-serializes only the structured fields; legacy free-text notes become null.
+ */
+export function publicFeedbackNote(note: string | null | undefined): string | null {
+  const parsed = parseFeedbackNote(note);
+  const segments: string[] = [];
+  if (parsed.mood) segments.push(`기분: ${MOOD_LABEL[parsed.mood]}`);
+  if (parsed.painAreas.length > 0) segments.push(`부위: ${parsed.painAreas.join(", ")}`);
+  if (parsed.painScore !== null) segments.push(`통증: ${parsed.painScore}/10`);
+  if (parsed.completedSets !== null && parsed.totalSets !== null) {
+    segments.push(`세트: ${parsed.completedSets}/${parsed.totalSets}`);
+  }
+  return segments.length > 0 ? segments.join(SEGMENT_SEPARATOR) : null;
+}

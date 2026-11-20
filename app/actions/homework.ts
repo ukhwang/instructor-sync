@@ -1,6 +1,5 @@
 "use server";
 
-import crypto from "crypto";
 import { revalidatePath } from "next/cache";
 import {
   generateWhyInputSchema,
@@ -21,7 +20,7 @@ import {
   isPublicDemoToken,
   submitHomeworkFeedbackV2Server,
 } from "@/lib/db-server";
-import { linkHomeworkToLesson } from "@/lib/schedule-server";
+import { generateLinkToken } from "@/lib/server/security/tokens";
 import { getExerciseMedia } from "@/lib/exercise-media";
 import { composeFeedbackNote, toDiscomfortLevel } from "@/lib/feedback-note";
 import { DataAccessError } from "@/lib/data-access-error";
@@ -125,17 +124,18 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
       data.why?.trim() ||
       PRESET_WHY_TEMPLATES[data.presetId ?? "spine-pelvis-5"](member.end_state?.slice(0, 24) ?? "");
 
-    const token = crypto.randomBytes(12).toString("hex");
+    const token = generateLinkToken();
     const now = new Date();
     const expiresAt = new Date(now.getTime() + HOMEWORK_LINK_TTL_MS);
 
     const created = await createHomework({
-      request_id: crypto.randomUUID(),
+      request_id: globalThis.crypto.randomUUID(),
       member_id: member.id,
       why,
       token,
       token_expires_at: expiresAt.toISOString(),
       assignment_purpose: "routine",
+      lesson_id: data.lessonId ?? null,
       items: sourceItems.map((item, index) => ({
         order_index: index + 1,
         name: item.name,
@@ -148,10 +148,7 @@ export async function assignHomeworkAction(input: AssignHomeworkInput): Promise<
     });
 
     // 수업 ↔ 숙제 연결은 부가 정보다. 실패해도 숙제 자체는 유효하므로 결과로만 알린다.
-    let lessonLinked = false;
-    if (data.lessonId) {
-      lessonLinked = await linkHomeworkToLesson({ homeworkId: created.id, lessonId: data.lessonId });
-    }
+    const lessonLinked = created.lessonLinked;
 
     const items: HomeworkItem[] = sourceItems.map((item, index) => ({
       id: `${created.id}-item-${index + 1}`,

@@ -125,7 +125,7 @@ export default function LandingPage() {
             <strong>운동숙제</strong> — B2B Fitness Homework Loop MSP
           </div>
           <div className="text-neutral-600">
-            Next.js 15 App Router + Supabase + TanStack Query + Zustand
+            Next.js 16 App Router + Cloudflare Workers/D1 + TanStack Query + Zustand
           </div>
         </div>
       </footer>

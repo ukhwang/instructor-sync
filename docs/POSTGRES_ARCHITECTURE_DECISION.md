@@ -1,5 +1,7 @@
 # ADR-001 — 자체 PostgreSQL 전환 기술 결정
 
+> **상태 갱신 (2026-11-20):** 사용자 요청으로 Cloudflare Workers + D1 이관을 구현했다([CLOUDFLARE_MIGRATION.md](CLOUDFLARE_MIGRATION.md)). 이 ADR의 PostgreSQL/Drizzle-pg/Docker 선택은 대체 제안됐고, Better Auth 이메일·비밀번호·DB 세션, 해시 토큰, 서버 경계, 불변조건은 D1 구현에서 재사용했다. 아래 본문은 당시 결정 기록으로 보존한다.
+
 2026-09-13 / **확정 · READY** / 구현 상태: **설계 작성됨, 코드·새 DB 미구현**. 조사·공식 문서 확인과 회귀검사는 2026-09-12에 수행하고 9월 13일 문서 정합성을 마무리했다.
 
 READY는 3단계의 합성 데이터 전용 로컬 환경 구현을 시작할 기술 결정이 갖춰졌다는 뜻이다. 실제 이전·파일럿·배포 승인이 아니다. 단계 원본은 [EXECUTION_CONTROL.md](EXECUTION_CONTROL.md), 불변조건은 [데이터 기준](DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md), 제품 범위는 [제품 기준](PRODUCT_BASELINE.md)이다.

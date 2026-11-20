@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { MilestoneReportCard } from "@/components/milestone/MilestoneReportCard";
 import { COPY } from "@/lib/copy";
-import { SAMPLE_REPORT_TOKEN, buildMilestoneView, buildSampleReport } from "@/lib/milestone-report";
+import { SAMPLE_REPORT_TOKENS, buildMilestoneView, buildSampleReport } from "@/lib/milestone-report";
 import { openMilestoneReport } from "@/lib/milestone-server";
 
 export const metadata: Metadata = {
@@ -21,7 +21,7 @@ const FAILURE_MESSAGE = {
 
 export default async function MilestoneReportPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const isSample = token === SAMPLE_REPORT_TOKEN;
+  const isSample = SAMPLE_REPORT_TOKENS.has(token);
   const outcome = isSample
     ? ({ ok: true, report: buildSampleReport() } as const)
     : await openMilestoneReport(token);

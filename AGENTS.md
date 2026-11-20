@@ -14,19 +14,20 @@
 ## 현재 구조와 진입점
 
 - Next.js 16 App Router, React 19, TypeScript: `app/`
-- 랜딩·인증: `app/page.tsx`, `app/login/page.tsx`, `app/auth/callback/route.ts`, `middleware.ts`
-- 강사 화면: `app/app/` (`members`, `homework`, `session`, `renewals`)
+- 랜딩·인증: `app/page.tsx`, `app/login/`, `app/api/auth/[...all]/route.ts`, `middleware.ts`, `app/app/layout.tsx`(세션 검증)
+- 강사 화면: `app/app/` (`members`, `homework`, `session`, `renewals`, `schedules`)
 - 회원 공개 링크: `app/h/[token]/`
-- 데이터 접근: 브라우저 `lib/db.ts`, 서버 `lib/db-server.ts`, Supabase 클라이언트 `lib/supabase/`
+- 호스팅: Cloudflare Workers(OpenNext) `wrangler.jsonc`, `open-next.config.ts`
+- 데이터 접근: 서버 읽기 `lib/db-server.ts`, 쓰기 Server Action `app/actions/`, D1 리포지토리 `lib/server/db/repositories/`, 인증 `lib/server/auth/`(Better Auth on D1). 브라우저 DB 클라이언트 없음
 - 운동 초안·코치: `stores/homework-draft-store.ts`, `lib/coach.ts`
-- 현재 SQL과 DB 테스트: `supabase/migrations/`, `tests/`
+- 현재 SQL과 DB 테스트: `migrations/`(D1), `tests/d1-*.test.mjs`; `supabase/migrations/`는 롤백·의미 참조용 보관
 
 ## 작업별 기준 문서
 
 요청에 필요한 문서만 읽는다.
 
 - 제품 범위·사용자·지표·결정 상태: `docs/PRODUCT_BASELINE.md`
-- 데이터/권한 작업 또는 PostgreSQL 이전 준비: `docs/DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md`
+- 데이터/권한 작업: `docs/DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md`(불변조건) + `docs/CLOUDFLARE_MIGRATION.md`(D1 구현·배포)
 - 로컬 실행·구조·검증 명령: `README.md`
 - 현재 미완료 작업과 최근 확인 결과: `docs/LATEST_HANDOFF.md`
 - 문서의 규범성·보관 상태: `docs/README.md`
@@ -39,10 +40,10 @@
 - 과거 강의 분석/FastAPI/LangChain 코드와 소원 앱은 현재 운동숙제 범위가 아니다. 현재 작업 트리에 다시 섞지 않는다.
 - 큰 구조 변경 전에는 비밀값과 빌드 산출물을 제외한 로컬 복구 스냅샷을 남긴다.
 
-## 자체 PostgreSQL 이전 방향과 불변조건
+## 데이터 플랫폼(Cloudflare D1)과 불변조건
 
-- 현재는 Supabase Postgres/Auth/RLS/RPC를 유지한다. 명시적 이전 작업 전에는 제거·스키마 변경·인증 교체를 시작하지 않는다.
-- 데이터/인증 경계를 분리한 뒤 자체 PostgreSQL로 단계적으로 이전한다. 확정된 기술 선택·전환 방식은 `docs/POSTGRES_ARCHITECTURE_DECISION.md`를 따른다. 실제 호스팅 구매·운영 적용은 별도 승인 사항이다.
+- 사용자의 명시적 요청으로 Supabase → Cloudflare Workers + D1 이관을 구현했다. 기술 선택·매핑·원자성 한계·배포/롤백은 `docs/CLOUDFLARE_MIGRATION.md`를 따른다. 자체 PostgreSQL 결정(`docs/POSTGRES_ARCHITECTURE_DECISION.md`)은 이 이관으로 대체 제안됐다.
+- Cloudflare 계정 리소스 생성·원격 마이그레이션·배포, Supabase 프로젝트 변경, 실데이터 이관은 사용자의 별도 승인 사항이다.
 - 소유권: 강사는 자신의 회원·숙제·로그·수업 메모만 접근한다. 하위 레코드는 부모 소유권을 벗어날 수 없다.
 - 원자성: 숙제와 동작 생성, 회원 상태와 통증·메모 제출은 각각 전부 성공하거나 전부 실패한다.
 - 멱등성: 네트워크 재시도와 동시 요청이 의미상 중복 기록이나 중복 상태 전이를 만들지 않는다.

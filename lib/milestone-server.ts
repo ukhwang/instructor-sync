@@ -1,25 +1,26 @@
 import "server-only";
-import crypto from "crypto";
 import { z } from "zod";
-
-import { createClient } from "@/lib/supabase/server";
 import { REPORT_TOKEN_PATTERN, openedReportSchema, type OpenedReport } from "./milestone-report";
+import { AuthRequiredError, requireTrainer } from "@/lib/server/auth/session";
+import { getServerEnv } from "@/lib/server/env";
+import * as reports from "@/lib/server/db/repositories/milestone-reports";
 
 export type OpenReportOutcome =
   | { ok: true; report: OpenedReport }
   | { ok: false; reason: "not_found" | "revoked" | "expired" | "unavailable" };
 
+/** Public read by token (no login). The memo free text is never returned (audit NV-1). */
 export async function openMilestoneReport(token: string): Promise<OpenReportOutcome> {
   if (!REPORT_TOKEN_PATTERN.test(token)) return { ok: false, reason: "not_found" };
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc("open_milestone_report", { p_token: token });
-    if (error) return { ok: false, reason: "unavailable" };
+    const env = await getServerEnv();
+    const data = await reports.openMilestoneReport(env.DB, token);
     const parsed = openedReportSchema.safeParse(data);
     if (parsed.success) return { ok: true, report: parsed.data };
     const failure = z.object({ reason: z.enum(["not_found", "revoked", "expired"]) }).safeParse(data);
     return { ok: false, reason: failure.success ? failure.data.reason : "unavailable" };
-  } catch {
+  } catch (error) {
+    console.error("[report] open failed", error instanceof Error ? error.message.slice(0, 200) : "unknown");
     return { ok: false, reason: "unavailable" };
   }
 }
@@ -34,24 +35,16 @@ const CREATE_REASON_MESSAGE: Record<string, string> = {
   invalid_token: "링크를 만들지 못했어요. 다시 시도해주세요.",
 };
 
-const createResultSchema = z.union([
-  z.object({ success: z.literal(true), token: z.string(), session_number: z.number().int() }),
-  z.object({ success: z.literal(false), reason: z.string() }),
-]);
-
 export async function createMilestoneReport(memberId: string): Promise<CreateReportOutcome> {
-  const token = crypto.randomBytes(12).toString("hex");
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase.rpc("create_milestone_report", { p_member_id: memberId, p_token: token });
-    if (error) return { ok: false, message: "서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요." };
-    const parsed = createResultSchema.safeParse(data);
-    if (!parsed.success) return { ok: false, message: "결과를 확인하지 못했어요. 다시 시도해주세요." };
-    if (!parsed.data.success) {
-      return { ok: false, message: CREATE_REASON_MESSAGE[parsed.data.reason] ?? "리포트를 만들지 못했어요." };
-    }
-    return { ok: true, token: parsed.data.token, sessionNumber: parsed.data.session_number };
-  } catch {
+    const { trainerId } = await requireTrainer();
+    const env = await getServerEnv();
+    const result = await reports.createMilestoneReport(env.DB, trainerId, memberId);
+    if (!result.success) return { ok: false, message: CREATE_REASON_MESSAGE[result.reason] ?? "리포트를 만들지 못했어요." };
+    return { ok: true, token: result.token, sessionNumber: result.session_number };
+  } catch (error) {
+    if (error instanceof AuthRequiredError) return { ok: false, message: CREATE_REASON_MESSAGE.unauthorized };
+    console.error("[report] create failed", error instanceof Error ? error.message.slice(0, 200) : "unknown");
     return { ok: false, message: "서버에 연결하지 못했어요. 잠시 후 다시 시도해주세요." };
   }
 }

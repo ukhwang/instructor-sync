@@ -352,6 +352,8 @@ export function VoiceCoachSession({
 
   useEffect(() => {
     if (!coachItems.length) return;
+    // One-time mount init of the coach state machine (refs + timers + state together).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional mount init; unchanged behaviour
     stageWork(0, 0, coachItems[0].per_side ? "left" : "none");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

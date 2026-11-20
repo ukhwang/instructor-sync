@@ -1,4 +1,4 @@
-"""master.json -> lib/exercises/master-db.ts + master-db.instructions.json (+ 교정된 rehab-db.ts)."""
+"""master.json -> lib/exercises/master-db.ts + public/data/exercise-instructions.v1.json (+ 교정된 rehab-db.ts)."""
 import json, re, os
 
 OUT = os.environ.get("OUT", "out/lib/exercises")
@@ -41,7 +41,8 @@ ts = (tpl.replace("/*__REHAB_MEDIA__*/", "\n".join(rehab_lines))
 open(f"{OUT}/master-db.ts", "w").write(ts)
 
 instr = {e["id"]: e["instruction"] for e in m if e["source"] == "gym"}
-json.dump(instr, open(f"{OUT}/master-db.instructions.json", "w"), ensure_ascii=False, separators=(",", ":"))
+INSTR_OUT = os.path.join(os.path.dirname(__file__), "..", "..", "public", "data", "exercise-instructions.v1.json")
+json.dump(instr, open(INSTR_OUT, "w"), ensure_ascii=False, separators=(",", ":"))
 
 # rehab-db.ts 교정본: gifUrl/posterUrl 두 줄만 교체 (다른 필드는 바이트 단위로 그대로)
 src = open(os.path.join(os.environ.get("REPO", "../.."), "lib/exercises/rehab-db.ts")).read()
@@ -59,5 +60,5 @@ for e in m:
 open(f"{OUT}/rehab-db.ts", "w").write(fixed)
 
 print("master-db.ts", os.path.getsize(f"{OUT}/master-db.ts"), "bytes")
-print("instructions.json", os.path.getsize(f"{OUT}/master-db.instructions.json"), "bytes")
+print("instructions.json", os.path.getsize(INSTR_OUT), "bytes")
 print("targets", len(targets), "rows", len(rows) - 2)
