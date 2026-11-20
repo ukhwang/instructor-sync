@@ -137,7 +137,15 @@ export function VoiceCoachSession({
   onFinished,
   onSetComplete,
 }: VoiceCoachSessionProps) {
-  const coachItems = useMemo(() => items.map(normalizeCoachItem), [items]);
+  const coachItems = useMemo(
+    () =>
+      items.map((item) => {
+        const normalized = normalizeCoachItem(item);
+        // 회원 화면은 exerciseName, 숙제 원본은 name 을 쓴다.
+        return { ...normalized, name: normalized.name || normalized.exerciseName || "운동" };
+      }),
+    [items],
+  );
   const [itemIndex, setItemIndex] = useState(0);
   const [setIndex, setSetIndex] = useState(0);
   const [side, setSide] = useState<"none" | "left" | "right">("none");
