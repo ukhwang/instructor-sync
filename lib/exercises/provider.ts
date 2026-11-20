@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/client';
+import { listPublishedExercisesAction } from '@/app/actions/data';
 import { seedRecords } from './catalog';
 import type { ExerciseCatalogProvider, ExerciseRecord } from './types';
 
@@ -20,11 +20,9 @@ export function fromDatabaseRow(row: DatabaseExerciseRow): ExerciseRecord {
 
 export const databaseExerciseProvider: ExerciseCatalogProvider = {
   async load() {
-    const { data, error } = await createClient().from('exercise_catalog')
-      .select('id,name,category,aliases,tags,equipment,default_cue,default_effort_kind,default_rep_count,default_hold_seconds,content_version,status,source_note,media_url,media_alt')
-      .eq('status', 'published').order('name').limit(1000);
-    if (error) throw new Error('운동 목록을 불러오지 못했습니다.');
-    return ((data ?? []) as DatabaseExerciseRow[]).filter((row) => row.status === 'published').map(fromDatabaseRow);
+    const result = await listPublishedExercisesAction();
+    if (!result.ok) throw new Error('운동 목록을 불러오지 못했습니다.');
+    return result.data.filter((row) => row.status === 'published').map(fromDatabaseRow);
   },
 };
 

@@ -1,13 +1,19 @@
 import { TrainerNav } from "@/components/TrainerNav";
 import { MotionPageTransition } from "@/components/motion/MotionPageTransition";
+import { requireTrainerPage } from "@/lib/server/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default function TrainerAppLayout({
+/**
+ * Authoritative /app guard: the session cookie is verified against the D1
+ * session table here (proxy/middleware only does an optimistic cookie check).
+ */
+export default async function TrainerAppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await requireTrainerPage("/app");
   return (
     <div className="min-h-screen flex flex-col bg-[#f7f7f5] text-[#111111]">
       <TrainerNav />

@@ -5,11 +5,12 @@ import { loadModule } from "./load-module.mjs";
 
 // master-db 와 rehab-db 가 같은 모듈 인스턴스를 공유해야 참조 동일성 검사가 성립한다.
 const cache = new Map();
-const mocks = {
-  "./master-db.instructions.json": JSON.parse(
-    readFileSync(new URL("../lib/exercises/master-db.instructions.json", import.meta.url), "utf8"),
-  ),
-};
+const mocks = {};
+// 동작 설명은 정적 에셋(public/data)으로 이동했다. 런타임 fetch 대신 같은 파일을 직접 주입한다.
+const instructionTable = JSON.parse(
+  readFileSync(new URL("../public/data/exercise-instructions.v1.json", import.meta.url), "utf8"),
+);
+const loadTable = async () => instructionTable;
 
 const {
   MASTER_DB_SIZE,
@@ -101,7 +102,7 @@ test("검색 성능: 질의당 평균 1ms 미만 (키 입력 프레임 예산 16
 });
 
 test("동작 설명은 지연 로딩된다", async () => {
-  assert.equal(typeof (await loadInstruction("ex-0025")), "string");
-  assert.equal(await loadInstruction("rehab-bird-dog"), REHAB_EXERCISES.find((e) => e.id === "rehab-bird-dog")?.instruction);
-  assert.equal(await loadInstruction("nope"), null);
+  assert.equal(typeof (await loadInstruction("ex-0025", loadTable)), "string");
+  assert.equal(await loadInstruction("rehab-bird-dog", loadTable), REHAB_EXERCISES.find((e) => e.id === "rehab-bird-dog")?.instruction);
+  assert.equal(await loadInstruction("nope", loadTable), null);
 });

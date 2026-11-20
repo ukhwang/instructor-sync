@@ -17,7 +17,7 @@ function pickNextLesson(lessons: LessonBlock[]): LessonBlock | null {
 }
 
 export default async function TrainerDashboardPage() {
-  // These authenticated Supabase reads are independent. Starting them together
+  // These trainer-scoped D1 reads are independent. Starting them together
   // removes one network round trip from the dashboard's server-render time.
   // 스케줄 조회 실패(마이그레이션 미적용 등)는 대시보드를 막지 않되, 로그로 남긴다.
   const [members, homeworks, todayLessons] = await Promise.all([

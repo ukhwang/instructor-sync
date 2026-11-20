@@ -1,7 +1,12 @@
-export const runtime = 'nodejs';
+import { getAuth } from '@/lib/server/auth';
 
-const disabled = () =>
-  Response.json({ code: 'AUTH_DISABLED' }, { status: 404 });
+/** Better Auth endpoints (sign-in, sign-up with invite, sign-out, session). */
+async function handle(request: Request): Promise<Response> {
+  const auth = await getAuth();
+  const response = await auth.handler(request);
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
+}
 
-export const GET = disabled;
-export const POST = disabled;
+export const GET = handle;
+export const POST = handle;

@@ -16,7 +16,8 @@ import {
   type SetLessonStatusInput,
   type WeekBoard,
 } from "@/lib/schedule-schemas";
-import { callScheduleRpc, getWeekBoard } from "@/lib/schedule-server";
+import { getWeekBoard, runScheduleMutation } from "@/lib/schedule-server";
+import * as lessons from "@/lib/server/db/repositories/lessons";
 
 function invalid(error: z.ZodError): { ok: false; reason: string; message: string } {
   return {
@@ -55,15 +56,9 @@ export async function createLessonsAction(
   const parsed = createLessonsInputSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
-  const result = await callScheduleRpc(
+  const result = await runScheduleMutation(
     "create_lessons",
-    {
-      p_series_id: parsed.data.seriesId,
-      p_member_id: parsed.data.memberId,
-      p_starts_at: parsed.data.startsAt,
-      p_duration_min: parsed.data.durationMin,
-      p_repeat_weeks: parsed.data.repeatWeeks,
-    },
+    (db, trainerId) => lessons.createLessons(db, trainerId, parsed.data),
     (payload) => ({
       lessonIds: z.array(lessonRowSchema).catch([]).parse(payload.lessons).map((row) => row.id),
     }),
@@ -78,7 +73,7 @@ export async function completeLessonAction(
   const parsed = lessonIdInputSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
-  const result = await callScheduleRpc("complete_lesson", { p_lesson_id: parsed.data.lessonId }, (payload) => ({
+  const result = await runScheduleMutation("complete_lesson", (db, trainerId) => lessons.completeLesson(db, trainerId, parsed.data.lessonId), (payload) => ({
     packageRemaining: packageRemainingSchema.catch(null).parse(payload.package_remaining) ?? null,
     replayed: payload.replayed === true,
   }));
@@ -92,9 +87,9 @@ export async function revertLessonCompletionAction(
   const parsed = lessonIdInputSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
-  const result = await callScheduleRpc(
+  const result = await runScheduleMutation(
     "revert_lesson_completion",
-    { p_lesson_id: parsed.data.lessonId },
+    (db, trainerId) => lessons.revertLessonCompletion(db, trainerId, parsed.data.lessonId),
     (payload) => ({ packageRemaining: packageRemainingSchema.catch(null).parse(payload.package_remaining) ?? null }),
   );
   if (result.ok) refreshScheduleViews();
@@ -105,9 +100,9 @@ export async function setLessonStatusAction(input: SetLessonStatusInput): Promis
   const parsed = setLessonStatusInputSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
-  const result = await callScheduleRpc(
+  const result = await runScheduleMutation(
     "set_lesson_status",
-    { p_lesson_id: parsed.data.lessonId, p_status: parsed.data.status },
+    (db, trainerId) => lessons.setLessonStatus(db, trainerId, parsed.data.lessonId, parsed.data.status),
     () => undefined,
   );
   if (result.ok) refreshScheduleViews();
@@ -118,13 +113,9 @@ export async function rescheduleLessonAction(input: RescheduleLessonInput): Prom
   const parsed = rescheduleLessonInputSchema.safeParse(input);
   if (!parsed.success) return invalid(parsed.error);
 
-  const result = await callScheduleRpc(
+  const result = await runScheduleMutation(
     "reschedule_lesson",
-    {
-      p_lesson_id: parsed.data.lessonId,
-      p_starts_at: parsed.data.startsAt,
-      p_duration_min: parsed.data.durationMin,
-    },
+    (db, trainerId) => lessons.rescheduleLesson(db, trainerId, parsed.data),
     () => undefined,
   );
   if (result.ok) refreshScheduleViews();

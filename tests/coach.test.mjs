@@ -67,40 +67,34 @@ test('normalization repairs stale saved fields and enforces effort limits', () =
   }
 });
 
-test('createHomework normalizes every atomic RPC item without synthetic DB fields', async () => {
+test('createHomework normalizes every atomic item without synthetic DB fields (server path)', async () => {
   let submittedItems;
-  let requestId;
-  const supabase = {
-    auth: { getUser: async () => ({ data: { user: { id: 'trainer' } } }) },
-    rpc: async (name, args) => {
-      assert.equal(name, 'create_homework_v2');
-      submittedItems = args.p_items;
-      requestId = args.p_request_id;
-      return { data: { success: true, id: 'homework' }, error: null };
+  const { createHomework } = loadModule('lib/db-server.ts', {
+    'server-only': {},
+    '@/lib/server/auth/session': { requireTrainer: async () => ({ trainerId: 'trainer' }) },
+    '@/lib/server/env': { getServerEnv: async () => ({ DB: {}, BETTER_AUTH_SECRET: 'x'.repeat(32) }) },
+    '@/lib/server/db/repositories/members': {},
+    '@/lib/server/db/repositories/public-homework': {},
+    '@/lib/server/db/sql': { isUuid: () => true },
+    '@/lib/server/db/repositories/homeworks': {
+      createHomework: async (_db, trainerId, input) => {
+        assert.equal(trainerId, 'trainer');
+        submittedItems = input.items;
+        return { success: true, id: 'homework', replayed: false, lesson_linked: false };
+      },
     },
-    from(table) {
-      assert.equal(table, 'homework');
-      const query = {
-        select: () => query,
-        eq: () => query,
-        single: async () => ({ data: { id: 'homework' }, error: null }),
-      };
-      return query;
-    },
-  };
-  const { createHomework } = loadModule('lib/db.ts', {
-    '@/lib/supabase/client': { createClient: () => supabase },
   });
-  await createHomework({
-    member_id: 'member', why: '', token: 'test-token', token_expires_at: '2026-10-01',
+  const created = await createHomework({
+    request_id: '10000000-0000-4000-8000-000000000001',
+    member_id: 'member', why: 'why', token: 'test-token-test-token-x', token_expires_at: '2026-10-01',
     items: [
       { ...manualItem, order_index: 1 },
       { ...manualItem, order_index: 2, target_reps: '30초' },
       { ...manualItem, order_index: 3, target_reps: '5회', reps: 15 },
     ],
   });
+  assert.equal(created.id, 'homework');
   assert.equal(submittedItems.length, 3);
-  assert.match(requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   assert.deepEqual(submittedItems.map(({ reps }) => reps), [12, null, 5]);
   assert.equal(submittedItems[1].hold_seconds, 30);
   for (const row of submittedItems) {

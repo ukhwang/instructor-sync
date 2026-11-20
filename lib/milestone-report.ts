@@ -12,6 +12,8 @@ import { PAIN_AREAS, type Homework, type HomeworkLog, type PainArea } from "./ty
 
 export const REPORT_TOKEN_PATTERN = /^[0-9a-f]{24}$/;
 export const SAMPLE_REPORT_TOKEN = "sample";
+/** Public sample report links (no database): /report/sample, /report/demo. */
+export const SAMPLE_REPORT_TOKENS: ReadonlySet<string> = new Set([SAMPLE_REPORT_TOKEN, "demo"]);
 
 const openedSubmissionSchema = z.object({
   homework_id: z.string(),
