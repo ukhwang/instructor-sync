@@ -8,6 +8,7 @@ import { DashboardBriefingSection, DashboardBriefingSkeleton } from "@/component
 import { getTodayLessons } from "@/lib/schedule-server";
 import type { LessonBlock } from "@/lib/schedule-schemas";
 import { BADGE_META, formatTime } from "@/lib/schedule-display";
+import { requireTrainerPage } from "@/lib/server/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ function pickNextLesson(lessons: LessonBlock[]): LessonBlock | null {
 }
 
 export default async function TrainerDashboardPage() {
+  // Page and layout render concurrently: redirect here too instead of throwing from data reads.
+  await requireTrainerPage("/app");
   // These trainer-scoped D1 reads are independent. Starting them together
   // removes one network round trip from the dashboard's server-render time.
   // 스케줄 조회 실패(마이그레이션 미적용 등)는 대시보드를 막지 않되, 로그로 남긴다.

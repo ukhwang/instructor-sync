@@ -6,14 +6,15 @@ import {
   createMember,
   nextMondayKst,
   select,
+  sha256,
   signUpTrainer,
   slotLabel,
   type SeedMember,
   type TrainerSession,
-} from "./support/supabase";
+} from "./support/d1";
 
 /**
- * 5단계 원루프 (실데이터, 모킹 없음)
+ * 원루프 (로컬 Workers 런타임 + 로컬 D1 실데이터, 모킹 없음)
  *  1. 원장 로그인 → /app/schedules → 수업 생성 → 겹치는 시간 재예약 차단
  *  2. 수업 완료(complete_lesson) → 숙제 바텀시트 자동 오픈 → 마스터 DB 검색·코칭 태그 → 출제 → /h/[token]
  *  3. 회원(로그인 없음, 390×844) → GIF 200 → 세트 체크 → 통증·부위·소감 제출
@@ -35,7 +36,7 @@ async function loginAsTrainer(page: Page, trainer: TrainerSession): Promise<void
   await page.goto("/app/schedules");
   await expect(page).toHaveURL(/\/login/); // 미로그인 → 로그인 페이지로 차단
   await page.getByPlaceholder("trainer@gym.com").fill(trainer.email);
-  await page.getByPlaceholder("••••••••").fill(trainer.password);
+  await page.getByPlaceholder("12자 이상").fill(trainer.password);
   await page.getByRole("button", { name: "대시보드 로그인" }).click();
   await expect(page).toHaveURL(/\/app(\/|$|\?)/);
 }
@@ -108,7 +109,7 @@ async function memberContext(browser: Browser) {
 
 test("원루프: 스케줄 → 수업 완료 → 숙제 출제 → 회원 모바일 제출 → 브리핑·리포트", async ({ page, browser, isMobile }, testInfo) => {
   const trainer = await signUpTrainer(testInfo.project.name);
-  const member = await createMember(trainer, `김E2E${isMobile ? "모" : "데"}`);
+  const member = createMember(trainer, `김E2E${isMobile ? "모" : "데"}`);
   const weekStart = nextMondayKst();
   const lessonDayA = weekStart; // 월 10:00 (완료 처리할 수업)
   const lessonDayB = addDays(weekStart, 1); // 화 10:00 (다음 수업 → 브리핑 대상)
@@ -126,12 +127,12 @@ test("원루프: 스케줄 → 수업 완료 → 숙제 출제 → 회원 모바
     await bookLesson(page, { date: lessonDayA, time: "10:00", member, duration: "50분" });
     await expectConfirmedLesson(page, "10:00", member); // pending(낙관적) → 서버 확정
 
-    // 겹치는 시간(09:30~10:30) 재예약 → 서버(btree_gist exclusion) 차단 → 토스트 + 낙관적 블록 롤백
+    // 겹치는 시간(09:30~10:30) 재예약 → 서버(D1 lessons_no_overlap 트리거) 차단 → 토스트 + 낙관적 블록 롤백
     await bookLesson(page, { date: lessonDayA, time: "09:30", member, duration: "60분" });
     await expect(page.getByText("그 시간엔 이미 수업이 있어요.")).toBeVisible();
     await expect(lessonBlock(page, "09:30", member)).toHaveCount(0);
 
-    const lessons = await select<LessonRow[]>(trainer, `lessons?select=id,starts_at,ends_at,status&member_id=eq.${member.id}`);
+    const lessons = select<LessonRow[]>("SELECT id, starts_at, ends_at, status FROM lessons WHERE member_id = ?", member.id);
     expect(lessons, "DB 에는 첫 수업 1건만 존재").toHaveLength(1);
     lessonA = lessons[0]!;
     expect(Date.parse(lessonA.starts_at)).toBe(Date.parse(`${lessonDayA}T10:00:00+09:00`));
@@ -143,7 +144,7 @@ test("원루프: 스케줄 → 수업 완료 → 숙제 출제 → 회원 모바
     await expect(page.getByText(`${member.name}님 수업을 예약했어요`).last()).toBeVisible();
     if (isMobile) await expectConfirmedLesson(page, "10:00", member);
     await expect
-      .poll(async () => (await select<LessonRow[]>(trainer, `lessons?select=id&member_id=eq.${member.id}`)).length)
+      .poll(() => select<LessonRow[]>("SELECT id FROM lessons WHERE member_id = ?", member.id).length)
       .toBe(2);
   });
 
@@ -160,12 +161,12 @@ test("원루프: 스케줄 → 수업 완료 → 숙제 출제 → 회원 모바
     await expectNoHorizontalScroll(page, "숙제 바텀시트");
     await snap(page, testInfo, "02-homework-sheet");
 
-    const done = await select<Array<{ status: string; completed_at: string | null }>>(
-      trainer,
-      `lessons?select=status,completed_at&id=eq.${lessonA.id}`,
+    const done = select<Array<{ status: string; completed_at: string | null }>>(
+      "SELECT status, completed_at FROM lessons WHERE id = ?",
+      lessonA.id,
     );
     expect(done[0]?.status).toBe("completed");
-    const memberRow = await select<Array<{ package_remaining: number }>>(trainer, `members?select=package_remaining&id=eq.${member.id}`);
+    const memberRow = select<Array<{ package_remaining: number }>>("SELECT package_remaining FROM members WHERE id = ?", member.id);
     expect(memberRow[0]?.package_remaining, "패키지 1회 차감").toBe(9);
 
     // 기본 카드에서 버드독(GIF 없음)을 빼고 글루트 브릿지를 1번으로 둔다
@@ -198,13 +199,17 @@ test("원루프: 스케줄 → 수업 완료 → 숙제 출제 → 회원 모바
 
     // 실데이터 확인: 숙제가 방금 완료한 수업에 연결되고 동작·코칭 큐가 저장됨
     const token = homeworkUrl.split("/h/")[1];
-    const hw = await select<Array<{ id: string; lesson_id: string | null; items: Array<{ name: string; target_sets: number; cue: string; order_index: number }> }>>(
-      trainer,
-      `homework?select=id,lesson_id,items:homework_items(name,target_sets,cue,order_index)&token=eq.${token}`,
+    // 토큰 원문은 DB에 없다: sha256 해시로만 찾는다 (NV-3)
+    const hw = select<Array<{ id: string; lesson_id: string | null }>>(
+      "SELECT id, lesson_id FROM homework WHERE token_hash = ?",
+      sha256(token),
     );
     expect(hw).toHaveLength(1);
     expect(hw[0]!.lesson_id, "수업 ↔ 숙제 연결").toBe(lessonA.id);
-    const items = [...hw[0]!.items].sort((a, b) => a.order_index - b.order_index);
+    const items = select<Array<{ name: string; target_sets: number; cue: string; order_index: number }>>(
+      "SELECT name, target_sets, cue, order_index FROM homework_items WHERE homework_id = ? ORDER BY order_index",
+      hw[0]!.id,
+    );
     expect(items.map((item) => item.name)).toEqual(["글루트 브릿지 (Glute Bridge)", "얼터네이트 랫풀다운"]);
     expect(items.map((item) => item.target_sets)).toEqual([2, 1]);
     expect(items[1]!.cue).toContain("척추 중립");

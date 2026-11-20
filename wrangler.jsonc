@@ -32,7 +32,13 @@
   },
   "observability": {
     "enabled": true,
-    // Request URLs are not logged by the app; keep sampling low to bound cost.
-    "head_sampling_rate": 0.1
+    "logs": {
+      "enabled": true,
+      // Audit NV-3: automatic per-request invocation logs record the request URL,
+      // which for /h/<token> and /report/<token> is a capability. Disabled; the app
+      // logs only operation names and error codes, never tokens or payloads.
+      "invocation_logs": false,
+      "head_sampling_rate": 1
+    }
   }
 }

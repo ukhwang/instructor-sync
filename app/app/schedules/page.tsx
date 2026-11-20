@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ScheduleScreen } from "@/components/schedules/ScheduleScreen";
 import { getMembers } from "@/lib/db-server";
 import { getWeekBoard } from "@/lib/schedule-server";
+import { requireTrainerPage } from "@/lib/server/auth/session";
 import { mondayOf, weekStartSchema, type WeekBoard } from "@/lib/schedule-schemas";
 import type { Member } from "@/lib/types";
 
@@ -19,6 +20,7 @@ export default async function SchedulesPage({
 }: {
   searchParams: Promise<{ week?: string | string[]; lesson?: string | string[] }>;
 }) {
+  await requireTrainerPage("/app/schedules");
   const params = await searchParams;
   const requestedWeek = typeof params.week === "string" ? params.week : null;
   const parsedWeek = requestedWeek ? weekStartSchema.safeParse(requestedWeek) : null;

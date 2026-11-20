@@ -127,3 +127,19 @@ test('briefing source reads the latest submission for an owned member only', asy
   assert.equal(own.latestSubmission.snapshot.result, 'cant');
   assert.deepEqual(await briefing.getBriefingSource(db, TRAINER_B, member.id), { member: null, latestSubmission: null });
 });
+
+test('lesson timestamps must be canonical ISO-8601 UTC (lexical order == time order)', async () => {
+  const { db, member } = await setup();
+  const insert = (startsAt, endsAt) => db.sqlite
+    .prepare("INSERT INTO lessons (id, trainer_id, member_id, series_id, starts_at, ends_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(crypto.randomUUID(), TRAINER_A, member.id, crypto.randomUUID(), startsAt, endsAt);
+  for (const [startsAt, endsAt] of [
+    ['2026-12-07T01:00:00Z', '2026-12-07T01:50:00Z'],
+    ['2026-12-07 01:00:00.000Z', '2026-12-07 01:50:00.000Z'],
+    ['2026-13-07T01:00:00.000Z', '2026-13-07T01:50:00.000Z'],
+    ['2026-12-07T10:00:00.000+09:00', '2026-12-07T10:50:00.000+09:00'],
+  ]) {
+    assert.throws(() => insert(startsAt, endsAt), /CHECK constraint failed/, startsAt);
+  }
+  insert('2026-12-07T01:00:00.000Z', '2026-12-07T01:50:00.000Z');
+});

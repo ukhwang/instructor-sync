@@ -1,16 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * 5단계 E2E 원루프 (원장 스케줄 → 수업 완료 → 숙제 출제 → 회원 모바일 제출 → 브리핑·리포트).
+ * 원루프 E2E (원장 스케줄 → 수업 완료 → 숙제 출제 → 회원 모바일 제출 → 브리핑·리포트)
+ * + 서버 인가/세션/공개 링크 계약.
  *
- * 실행 전제: 로컬 Supabase(또는 동등한 로컬 스택)와 그 URL 로 빌드한 앱.
- *   E2E_SUPABASE_URL / E2E_SUPABASE_ANON_KEY 는 localhost 만 허용한다 (e2e/support/env.ts 에서 강제).
- *   운영 DB 로는 절대 실행되지 않는다.
- *
- * 브라우저: 기본은 Playwright 번들 Chromium. 번들을 받을 수 없는 환경은
- *   PLAYWRIGHT_CHROME_PATH=/usr/bin/google-chrome 처럼 설치된 Chrome 경로를 지정한다.
+ * 실행 전제: 로컬 Cloudflare Workers 런타임(wrangler dev)과 로컬 D1.
+ *   npm run cf:build && npm run cf:migrate && npm run test:e2e
+ * E2E_BASE_URL 은 localhost 만 허용한다 (e2e/support/env.ts 에서 강제). 운영 DB 로는 절대 실행되지 않는다.
+ * .dev.vars 의 BETTER_AUTH_URL 은 E2E_BASE_URL 과 같은 origin 이어야 한다 (기본 http://localhost:8787).
  */
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3100";
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:8787";
 const executablePath = process.env.PLAYWRIGHT_CHROME_PATH || undefined;
 
 export default defineConfig({
@@ -54,7 +53,7 @@ export default defineConfig({
   webServer: process.env.E2E_SKIP_WEBSERVER
     ? undefined
     : {
-        command: "npm run start -- -p 3100",
+        command: "npx wrangler dev --port 8787 --ip 127.0.0.1",
         url: `${baseURL}/login`,
         reuseExistingServer: true,
         timeout: 120_000,

@@ -1,37 +1,23 @@
-# E2E (Playwright) — 5단계 원루프
+# E2E (Playwright) — 로컬 Cloudflare Workers + 로컬 D1
 
-운영 DB 와 무관한 **로컬 Supabase** 위에서 실데이터로 돈다. 모킹 없음, service_role 미사용(모든 준비·검증은 강사 본인 토큰 또는 anon 키로 RLS·RPC 경로를 그대로 탄다).
-`E2E_SUPABASE_URL` 이 localhost 가 아니면 테스트가 시작 전에 중단된다 (`e2e/support/env.ts`).
+운영 DB·실계정에는 절대 붙지 않는다. `E2E_BASE_URL`은 localhost만 허용한다(`e2e/support/env.ts`).
 
-| 파일 | 내용 |
-| --- | --- |
-| `one-loop.spec.ts` | 로그인 → 스케줄 생성 → 겹침 예약 차단 → 수업 완료(패키지 차감) → 숙제 바텀시트(마스터 DB 검색·코칭 태그) → `/h/[token]` 회원 제출(390×844, GIF 200, 64px 터치) → 대시보드·다음 수업 브리핑 → `/report/[token]` |
-| `security.spec.ts` | 원장 간 격리(조회·RPC·직접 쓰기), anon 권한, 겹침 exclusion, `/h` 최소 노출·`no-store` |
-
-## 1) 로컬 스택
-
-Docker 가 있으면:
+## 실행
 
 ```bash
-supabase start && supabase db reset        # supabase/migrations 전부 적용
-# 출력된 API URL / anon key 를 아래 env 에 사용
+cp .dev.vars.example .dev.vars   # BETTER_AUTH_SECRET 을 임의의 32자 이상으로, URL 은 http://localhost:8787
+npm run cf:build                 # opennextjs-cloudflare build
+npm run cf:migrate               # wrangler d1 migrations apply --local
+npm run test:e2e                 # wrangler dev(8787)를 띄우고 전체 스펙 실행
 ```
 
-Docker 가 없으면 (PostgreSQL 16 로컬 설치 필요, GoTrue·PostgREST 바이너리는 GitHub 릴리스에서 받음):
+- 이미 `wrangler dev`가 떠 있으면 `E2E_SKIP_WEBSERVER=1`.
+- 번들 Chromium 버전이 다르면 `PLAYWRIGHT_CHROME_PATH=/path/to/chrome`.
+- 로그인 rate limit(D1 `rate_limit`)은 IP 단위라, 짧은 시간에 반복 실행하면 429가 날 수 있다. 로컬 D1의 `rate_limit` 행을 지우거나 1분 뒤 재실행한다.
 
-```bash
-bash e2e/local-stack/start.sh             # 실행마다 새 DB 클러스터, UTC
-source e2e/local-stack/.stack/e2e.env
-# 끝나면: bash e2e/local-stack/stop.sh
-```
+## 스펙
 
-## 2) 빌드 → 실행
+- `one-loop.spec.ts` (mobile-390, desktop-1280): 초대 가입한 원장 로그인 → 스케줄 → 겹치는 예약 차단 → 수업 완료(잔여 1회 차감) → 숙제 바텀시트(마스터 DB 검색·코칭 태그) → 출제 → 회원 모바일(로그인 없음) 세트 체크·통증·소감 제출 → 대시보드·다음 수업 브리핑 반영 → 10회차 리포트.
+- `security.spec.ts` (desktop): 교차 원장 화면 차단, 세션 없음·위조 쿠키 차단(layout의 D1 세션 검증), 초대 없는 가입 403, 세션 쿠키 HttpOnly·Secure·SameSite=Lax, 로그인 rate limit 429, `/h`·`/report` 최소 노출·no-store·no-referrer, 공개 리포트 메모 비노출, 레거시 REST 부재.
 
-```bash
-export E2E_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL E2E_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-npm run build                              # NEXT_PUBLIC_* 가 빌드에 인라인되므로 로컬 값으로 빌드
-npm run test:e2e                           # next start -p 3100 자동 기동 (이미 떠 있으면 재사용)
-# 번들 Chromium 을 받을 수 없는 환경: PLAYWRIGHT_CHROME_PATH=/usr/bin/google-chrome npm run test:e2e
-```
-
-검증 범위 밖: 실제 카카오톡 인앱 브라우저·iOS Safari·실기기 음성 인식, 운영 Supabase 적용 상태.
+픽스처(초대 행, 회원)는 `e2e/support/d1.ts`가 로컬 D1 파일에 직접 넣는다. 강사 계정은 실제 Better Auth 가입 엔드포인트로 만든다.

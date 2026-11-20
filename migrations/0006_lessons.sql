@@ -3,14 +3,17 @@
 -- The Postgres EXCLUDE USING gist (no overlapping non-cancelled lessons per
 -- trainer) becomes BEFORE INSERT/UPDATE triggers. Timestamps are fixed-width
 -- ISO-8601 UTC strings (CHECKed below), so string comparison is chronological.
+-- D1 limits: LIKE/GLOB patterns <= 50 bytes, <= 100 bound parameters per query.
 
 CREATE TABLE lessons (
   id TEXT PRIMARY KEY NOT NULL,
   trainer_id TEXT NOT NULL,
   member_id TEXT NOT NULL,
   series_id TEXT NOT NULL,
-  starts_at TEXT NOT NULL CHECK (starts_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z'),
-  ends_at TEXT NOT NULL CHECK (ends_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z'),
+  -- Canonical toISOString() form only (YYYY-MM-DDTHH:MM:SS.sssZ). D1 caps LIKE/GLOB
+  -- patterns at 50 bytes, so the shape is checked with length/substr/strftime instead.
+  starts_at TEXT NOT NULL CHECK (length(starts_at) = 24 AND strftime('%Y-%m-%dT%H:%M:%fZ', starts_at) IS starts_at),
+  ends_at TEXT NOT NULL CHECK (length(ends_at) = 24 AND strftime('%Y-%m-%dT%H:%M:%fZ', ends_at) IS ends_at),
   status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'no_show', 'cancelled')),
   completed_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
