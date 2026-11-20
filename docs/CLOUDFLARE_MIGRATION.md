@@ -170,19 +170,24 @@ full table scans on request paths: 0
 | 주간 스케줄 | 세션 확인 + 2 (보드 batch 2, 회원 1) | 이전 PostgREST 2왕복 → 보드 1왕복 |
 | `/app/*` 미들웨어 | 0 | 쿠키 유무만 |
 
-Worker 번들(`wrangler deploy --dry-run`): Phase A 2,978.68 KiB gzip → 최종 **2,806.33 KiB gzip** (Supabase 제거·설명 JSON 분리). Free 한도 3 MiB 대비 여유가 작다.
+Worker 번들(`wrangler deploy --dry-run`): Phase A 2,978.68 KiB gzip → 최종 **2,806.33 KiB gzip** (Supabase 제거·설명 JSON 분리). 한도는 비압축 기준 64 MiB(Free·Paid 동일)이고 최종 비압축 크기는 12,981.16 KiB(약 12.7 MiB, 약 20%)라 크기 여유는 충분하다. gzip 값은 참고용이며 한도가 아니다(§8 근거).
 
 ## 8. 무료/유료 플랜 판단
 
 | 항목 | Free | Paid ($5/월) | 이 앱 |
 | --- | --- | --- | --- |
-| 요청당 CPU | 10ms | 기본 30초 | 로그인·가입 1회 scrypt ≈ 100~150ms(Node 측정) → **Free에서 로그인 실패(1102) 위험** |
+| 요청당 CPU | 10ms | 5분 상한(기본 30초, `limits.cpu_ms`로 최대 300,000ms까지 상향) | 로그인·가입 1회 scrypt ≈ 100~150ms(Node 측정) → **Free에서 로그인 실패(1102) 위험** |
 | 요청 수 | 하루 10만 | 월 1,000만 포함 | 소형 센터 파일럿은 어느 쪽도 충분 |
-| 번들 | 3 MiB gzip | 10 MiB | 2.81 MiB → Free는 의존성 하나만 늘어도 초과 |
+| Worker 크기 | 64 MiB(비압축) | 64 MiB(비압축) | 비압축 12,981.16 KiB ≈ 12.7 MiB(약 20%). gzip(2,806 KiB)은 참고값, 한도 아님 → 플랜 선택에 영향 없음 |
 | D1 | 무료 한도 내 | 무료 한도 넓음 | 쿼리는 인덱스 탐색·batch |
 | 대역폭 | 0원 | 0원 | |
 
-**결론: 프로덕션은 Workers Paid($5) 권장(사실상 필수).** 근거: (1) 비밀번호 해시 CPU가 Free 10ms 한도를 10배 이상 넘는다 — 해시 강도를 낮추는 대신 플랜으로 해결, (2) 번들 여유 0.27 MiB. Free는 `/h`·`/report` 공개 링크 시연에는 쓸 수 있지만 강사 로그인을 보장하지 못한다. 요청당 CPU를 줄이는 설계(미들웨어 D1 0회, batch, 인덱스, 정적 에셋 분리, 공개 링크 1왕복)는 Paid에서도 비용·지연을 낮춘다.
+수치 근거(2026-11-20 확인):
+
+- Cloudflare Workers limits: https://developers.cloudflare.com/workers/platform/limits/ — 표 "Worker size 64 MiB / 64 MiB", "CPU time 10 ms / 5 min", CPU 절의 "5 min (default: 30 seconds)", Worker size 절의 "There is no compressed size limit. Only the uncompressed bundle size counts. … The `gzip` value is shown for reference but is not a limit." 이 컨테이너에서는 developers.cloudflare.com 접속이 막혀 있어 같은 문서의 원본 소스 [`cloudflare-docs` `src/content/docs/workers/platform/limits.mdx`](https://github.com/cloudflare/cloudflare-docs/blob/production/src/content/docs/workers/platform/limits.mdx)(production 브랜치)를 읽어 확인했다.
+- wrangler 4.165 동작: `wrangler deploy`/`--dry-run`은 로컬에서 크기를 막지 않는다. `Total Upload`는 비압축 크기를 `MAX_UNCOMPRESSED_SIZE_BYTES = 64 MiB` 대비 비율로 색만 바꿔 출력(70% 초과 노랑, 90% 초과 빨강)하고, 실제 거부는 업로드 시 서버 검증 오류 코드 `10027`이며 wrangler는 이를 "Your Worker failed validation because it exceeded size limits."로 설명한다(`node_modules/wrangler/wrangler-dist/cli.js`의 `printBundleSize`, `errIsScriptSize`). 같은 서버 검증의 시작 시간 한도(1초, 오류 `10021`)는 dry-run으로 확인되지 않으므로 미검증이다.
+
+**결론: 프로덕션은 Workers Paid($5) 권장(사실상 필수).** 근거: 비밀번호 해시 CPU가 Free 10ms 한도를 10배 이상 넘는다 — 해시 강도를 낮추는 대신 플랜으로 해결. Free는 `/h`·`/report` 공개 링크 시연에는 쓸 수 있지만 강사 로그인을 보장하지 못한다. 요청당 CPU를 줄이는 설계(미들웨어 D1 0회, batch, 인덱스, 정적 에셋 분리, 공개 링크 1왕복)는 Paid에서도 비용·지연을 낮춘다.
 
 ## 9. 환경변수 · 시크릿 · 바인딩
 
