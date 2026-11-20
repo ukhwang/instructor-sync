@@ -11,14 +11,15 @@
 | `../README.md` | 현재 구조, 로컬 실행, 검사 명령 | 실행·빌드·구조 파악 |
 | `PRODUCT_BASELINE.md` | 사용자, 범위, 흐름, 지표, 결정 상태의 단일 기준 | 제품·UX·카피·우선순위 작업 |
 | `DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md` | 소유권·원자성·멱등성·토큰·이전 게이트 | DB·인증·토큰·데이터 접근 작업 |
-| [POSTGRES_ARCHITECTURE_DECISION.md](POSTGRES_ARCHITECTURE_DECISION.md) | 자체 PostgreSQL 기술 선택·목표 모델·전환/복구의 확정 기준 | 새 데이터/인증 경계 구현·로컬 PostgreSQL 환경 작업 |
+| [CLOUDFLARE_MIGRATION.md](CLOUDFLARE_MIGRATION.md) | Workers + D1 구조, Supabase→D1 매핑, 원자성 한계, 인증·인가, 배포·롤백 명령, 플랜 판단 | 데이터/인증 구현·배포·운영 준비 |
+| [POSTGRES_ARCHITECTURE_DECISION.md](POSTGRES_ARCHITECTURE_DECISION.md) | 자체 PostgreSQL 기술 선택(**D1 이관으로 대체 제안됨**, Better Auth·불변조건 부분은 재사용) | 과거 결정 근거 확인 시 |
 | [P0_VERIFICATION_MATRIX.md](P0_VERIFICATION_MATRIX.md) | P0 실행 계약 매핑·실패/차단 결과 | 데이터/인증 구현과 P0 재검증; 필요한 계층만 적용 |
 | [../infra/postgres/README.md](../infra/postgres/README.md) | 합성 로컬 PostgreSQL 실행·마이그레이션·백업·복원 명령 | 4단계 환경 재현·검증 시 |
 | `LATEST_HANDOFF.md` | 최근 확인 상태와 다음 작업 | 중단된 구현을 이어갈 때 |
 | [EXECUTION_CONTROL.md](EXECUTION_CONTROL.md) | 단계 번호·상태·완료 증거·차단 사유의 단일 기준 | 단계 작업 시작·재개·완료 |
 | [CHATGPT_PROJECT_INSTRUCTIONS.md](CHATGPT_PROJECT_INSTRUCTIONS.md) | ChatGPT 프로젝트에 붙여넣는 짧은 지침 | 프로젝트 작업환경 설정 |
 
-정책이 충돌하면 제품 판단은 `PRODUCT_BASELINE.md`, 데이터 불변조건은 `DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md`, 기술 선택은 `POSTGRES_ARCHITECTURE_DECISION.md`, 작업 경계는 `AGENTS.md`가 우선한다. 핸드오프와 검토서는 기준 문서를 바꾸지 않는다.
+정책이 충돌하면 제품 판단은 `PRODUCT_BASELINE.md`, 데이터 불변조건은 `DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md`, 기술 선택은 `CLOUDFLARE_MIGRATION.md`, 작업 경계는 `AGENTS.md`가 우선한다. 핸드오프와 검토서는 기준 문서를 바꾸지 않는다.
 
 단계 번호와 상태는 `EXECUTION_CONTROL.md`를 우선한다. 데이터 문서의 이전 방향 1~6은 개념 순서이며 실행 단계 번호가 아니다. 기존 문서의 `실환경 검증됨`은 실행 상태에 기록할 때 일회용 환경·실기기·운영 검증으로 구체화한다. `운영 적용됨`은 배포 사실이며 `운영 검증됨`과 구분한다.
 
@@ -52,7 +53,7 @@
 
 - 제품 기능/카피/지표: `AGENTS.md` + `PRODUCT_BASELINE.md`
 - UI/라우트/일반 버그: `AGENTS.md` + `README.md` + 관련 코드, 필요할 때만 `LATEST_HANDOFF.md`
-- DB/인증/권한/토큰: `AGENTS.md` + `DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md` + 관련 SQL/테스트
-- 자체 PostgreSQL 이전 계획: 위 데이터 문서 + 실제 스키마/권한의 읽기 전용 조사 결과
+- DB/인증/권한/토큰: `AGENTS.md` + `DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md` + `CLOUDFLARE_MIGRATION.md` + `migrations/`·`tests/d1-*`
+- Cloudflare 배포·롤백: `CLOUDFLARE_MIGRATION.md` §9~11
 - 시장/가격: `PRODUCT_BASELINE.md` + `REVIEW_MARKET_FINANCE_2026-09-10.md`; 가격은 제안으로 취급
 - 현장/모바일 QA: `PRODUCT_BASELINE.md` + `REVIEW_FRONTEND_FIELD_2026-09-10.md` + 관련 화면 코드

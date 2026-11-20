@@ -1,8 +1,15 @@
 # 운동숙제 최신 핸드오프
 
 > 문서 상태: **현재 진행 상태 전용**  
-> 갱신일: 2026-09-13  
+> 갱신일: 2026-11-20\
 > 제품 정책은 `PRODUCT_BASELINE.md`, 데이터 기준은 `DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md`가 우선한다.
+
+## Cloudflare Workers + D1 이관 (2026-11-20, 브랜치 `feat/cloudflare-migration`)
+
+- 상태: **구현됨 · 로컬 검증됨**(workerd + 로컬 D1). Cloudflare 계정 배포·원격 D1·실기기는 **미검증**, **운영 미적용**. Vercel/Supabase는 변경하지 않았다.
+- 단계 커밋: `phase-a` 어댑터·빌드, `phase-b` D1 스키마·리포지토리·Better Auth 배선, `phase-c` 인증·인가 강화·E2E, `phase-d` 캐싱·인덱스·문서.
+- 감사 지적 C-1·NV-1·NV-2·NV-3 해결과 검증 위치, 원자성 한계, 배포 명령, 롤백: [CLOUDFLARE_MIGRATION.md](CLOUDFLARE_MIGRATION.md).
+- 다음 작업(사용자 승인 필요): `wrangler d1 create` → 원격 마이그레이션 → 시크릿 → 배포, 첫 원장 초대, 실기기 카카오톡 흐름 확인, 실데이터 이관 계획.
 
 ## 4단계 완료 (2026-09-13)
 

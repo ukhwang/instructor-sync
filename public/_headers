@@ -1,0 +1,12 @@
+# Cloudflare Workers static assets headers (served from .open-next/assets).
+# Content-hashed Next.js build output never changes for a given URL.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Versioned exercise instruction table (file name carries the version).
+/data/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Exercise media posters (stable names; allow a week of edge/browser caching).
+/exercise-media/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
