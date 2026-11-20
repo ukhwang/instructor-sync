@@ -215,7 +215,10 @@ export async function getAllHomeworks(): Promise<Homework[]> {
       supabase
         .from("homework")
         .select(
-          "*, member:members(id, name, phone, package_remaining, end_state), items:homework_items(*), logs:homework_logs(*)"
+          // 대시보드 전용 조회. 이 결과를 쓰는 화면(app/app/page.tsx → buildCareQueue)은
+          // 로그의 kind·created_at·homework_id만 읽는다. 세트 기록 payload(jsonb)는
+          // 숙제 1건당 수십 행씩 계속 쌓이는 가장 큰 컬럼이라 여기서 빼서 Egress를 줄인다.
+          "*, member:members(id, name, phone, package_remaining, end_state), items:homework_items(*), logs:homework_logs(id, homework_id, kind, created_at)"
         )
         .order("created_at", { ascending: false })
     );
