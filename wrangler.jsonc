@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Cloudflare Workers deployment for the Next.js app (built by @opennextjs/cloudflare).
+  // Account-level resources (D1 database id, secrets) are NOT created by this repo.
+  // See docs/CLOUDFLARE_MIGRATION.md for the operator runbook.
+  "name": "instructor-sync",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      // Self-reference binding used by OpenNext for internal revalidation/caching.
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "instructor-sync"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "instructor-sync",
+      // Placeholder. Replace with the id printed by `wrangler d1 create instructor-sync`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "NEXT_PUBLIC_APP_URL": "https://instructor-sync.example.workers.dev"
+  },
+  "observability": {
+    "enabled": true,
+    // Request URLs are not logged by the app; keep sampling low to bound cost.
+    "head_sampling_rate": 0.1
+  }
+}

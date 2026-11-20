@@ -58,3 +58,9 @@ next-env.d.ts
 
 # E2E 로컬 스택 산출물
 /e2e/local-stack/.stack/
+
+# Cloudflare / OpenNext build output and local state
+/.open-next/
+/.wrangler/
+.dev.vars
+!.dev.vars.example
