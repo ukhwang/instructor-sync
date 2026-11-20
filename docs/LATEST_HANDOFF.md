@@ -1,8 +1,17 @@
 # 운동숙제 최신 핸드오프
 
 > 문서 상태: **현재 진행 상태 전용**  
-> 갱신일: 2026-09-13  
+> 갱신일: 2026-11-20  
 > 제품 정책은 `PRODUCT_BASELINE.md`, 데이터 기준은 `DATA_INTEGRITY_AND_POSTGRES_MIGRATION.md`가 우선한다.
+
+## 2026-11-20: 숙제 동작 20개 확장 + 회원 음성 코치 연결
+
+- **구현됨·로컬 검증됨**: 숙제 1건당 동작 상한 3 → 20. `MAX_HOMEWORK_ITEMS`(lib/homework-schemas.ts) 한 곳에서 관리하고, 출제 바텀시트(QuickAssignDrawer)·초안 스토어·서버 오류 문구가 모두 이 상수를 쓴다.
+- **SQL 추가·운영 미적용**: `supabase/migrations/20261120120000_homework_items_twenty.sql` — `homework_items.order_index` CHECK(1~20), `create_homework`·`create_homework_v2`의 개수·순서 검증을 1~20으로 재정의. 이 마이그레이션을 운영 Supabase에 적용해야 실제 4개 이상 출제가 저장된다. 미적용 상태에서는 RPC가 `invalid_items`를 돌려주고 화면에 "운동은 1~20개…" 안내가 뜬다.
+- **구현됨·로컬 검증됨**: 회원 운동 화면(`/h/[token]`)에 음성 코치 진입 버튼을 연결했다. 버튼 탭(사용자 제스처)에서 AudioContext를 열고 `public/audio/counts/*.wav`(하나~스물, 서른·마흔·쉰)를 한 번에 디코딩해 `AudioBufferSourceNode.start(ctx.currentTime)` 으로 카운트를 재생한다(오프라인·미지원 시에만 speechSynthesis 폴백).
+- **구현됨·로컬 검증됨**: 코칭 멘트는 원장님이 고른 코칭 태그(cue에 `, `로 이어 저장됨)를 우선 쓰고, 없으면 운동 DB 기본 코칭 태그를 쓴다. 세트 시작과 3회마다·절반 지점에 화면 중앙 배지 + 음성 큐로 나가며, 카운트 클립이 끝난 뒤에 말한다.
+- 음성 코치에서 마친 세트는 기존 세트 로그 큐로 그대로 기록되고, 종료 시 마친 동작·세트 수가 최종 피드백 판정에 반영된다.
+- 검증: `node --test`(전체), `tsc --noEmit`, `eslint`, `next build` 통과. `/h/demo-token` 로컬 서버에서 버튼 렌더와 카운트 파일 HTTP 200 확인. **실기기(카카오톡 인앱 브라우저·iOS) 오디오 검증은 별도**다.
 
 ## 4단계 완료 (2026-09-13)
 

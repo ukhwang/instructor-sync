@@ -253,3 +253,42 @@ test('audio construction failure still allows the coach to open without sound', 
   s.browser.AudioContext = class { constructor() { throw new Error('not allowed'); } };
   assert.equal(await s.unlockAudioFromGesture(), null);
 });
+
+test('카운트 클립을 받아 두면 말하기 합성 대신 오디오 버퍼로 센다', async (t) => {
+  const played = [];
+  const ctx = {
+    state: 'running', currentTime: 5,
+    createBufferSource() { return { buffer: null, connect() {}, start(at) { played.push(at); }, stop() {} }; },
+    createOscillator: () => ({ frequency: {}, connect() {}, start() {}, stop() {} }),
+    createGain: () => ({ gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }),
+    decodeAudioData(_bytes, done) { done({ duration: 0.4 }); },
+  };
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  t.after(() => { globalThis.fetch = previousFetch; });
+
+  const s = session(t, { target_reps: '4회', seconds_per_rep: 1, cue: '코어 잡기, 허리 바닥에 붙이기' }, ctx);
+  await s.settle(); await s.settle();
+
+  assert.ok(s.text.includes('카운트 준비됨'), '카운트 클립 준비 상태가 화면에 보인다');
+  assert.deepEqual(s.speech.filter((line) => ['하나', '둘', '셋', '넷'].includes(line)), [],
+    '준비된 카운트는 말하기 합성으로 나가지 않는다');
+
+  s.advance(1000);
+  assert.equal(s.count, '2 / 4');
+  assert.ok(played.length >= 1, '카운트는 AudioBufferSource 로 재생된다');
+  assert.equal(played.every((at) => typeof at === 'number'), true);
+
+  // 절반 지점(2회)에 원장님 코칭 멘트가 배지 + 음성으로 나간다.
+  assert.equal(s.speech.filter((line) => line === '코어 잡기').length, 0);
+  s.advance(700);
+  assert.equal(s.speech.filter((line) => line === '코어 잡기').length, 1);
+});
+
+test('코칭 멘트는 일시정지하면 예약이 취소되어 말하지 않는다', async (t) => {
+  const s = session(t, { target_reps: '4회', seconds_per_rep: 1, cue: '허리 바닥에 붙이기' }, null);
+  s.advance(1000); // 2회 = 절반 지점 코칭
+  s.click('일시정지');
+  s.advance(3000);
+  assert.equal(s.speech.filter((line) => line === '허리 바닥에 붙이기').length, 0);
+});

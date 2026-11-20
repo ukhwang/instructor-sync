@@ -308,7 +308,7 @@ export class HomeworkCreationError extends Error {
 const CREATE_REASON_MESSAGE: Record<string, string> = {
   unauthorized: "로그인이 만료되었어요. 다시 로그인해주세요.",
   member_not_found: "회원 정보를 찾을 수 없어요.",
-  invalid_items: "운동은 1~3개, 세트는 1~99 사이로 담아주세요.",
+  invalid_items: "운동은 1~20개, 세트는 1~99 사이로 담아주세요.",
   invalid_why: "숙제 설명이 비어 있어요.",
   invalid_token: "링크를 만들지 못했어요. 다시 시도해주세요.",
   invalid_expiry: "링크 만료일이 올바르지 않아요.",

@@ -7,7 +7,9 @@ import {
   getHomeworkExerciseMedia,
   getExerciseMedia,
   getHomeworkExerciseDescription,
+  getExerciseCoachingTags,
 } from "@/lib/exercise-media";
+import { resolveCoachingCues } from "@/lib/voice-coach/coaching-cues";
 
 export const metadata: Metadata = {
   title: "운동숙제 — 회원 기록",
@@ -87,6 +89,12 @@ export default async function MemberHomeworkPage({
       durationSec: null,
       restSec: it.rest_seconds ?? 30,
       cue: it.cue || getHomeworkExerciseDescription(source) || "정확한 자세와 호흡에 집중하세요",
+      // 음성 코치: 원장님 코칭 태그(cue에 이어 붙음) → 운동 DB 기본 코칭 태그 순서
+      coachingCues: resolveCoachingCues(it.cue, getExerciseCoachingTags(name)),
+      target_reps: it.target_reps ?? undefined,
+      hold_seconds: it.hold_seconds ?? null,
+      seconds_per_rep: it.seconds_per_rep ?? undefined,
+      per_side: it.per_side ?? false,
       mediaUrl,
       mediaType,
       posterUrl: media?.poster || null,

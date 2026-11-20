@@ -18,7 +18,7 @@ export const COPY = {
   MEMBER: {
     TITLE_SUFFIX: '님의 이번 주 운동숙제',
     WHY_HEADING: '이번 숙제를 드리는 이유',
-    EXERCISE_LIST_HEADING: '수업 때 맞춘 동작 1~3가지',
+    EXERCISE_LIST_HEADING: '수업 때 맞춘 동작',
     ACTION_QUESTION: '동작을 해보셨나요?',
     VOICE_COACH_START: '음성 코치로 시작하기',
     BTN_COMPLETE: '완료했습니다',

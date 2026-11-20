@@ -63,6 +63,14 @@ export interface Member {
   updated_at: string;
 }
 
+/** 음성 코치 세션 종료 시 회원 기록으로 넘기는 요약. */
+export interface VoiceCoachSummary {
+  /** 모든 세트를 마친 동작 id */
+  itemIds: string[];
+  /** 마친 세트 수 */
+  sets: number;
+}
+
 export interface HomeworkItem {
   id: string;
   homeworkId?: string;
@@ -88,6 +96,8 @@ export interface HomeworkItem {
   seconds_per_rep?: number;
   per_side?: boolean;
   requirement?: 'required' | 'optional';
+  /** 음성 코치가 띄우는 코칭 멘트(원장님 태그 우선, 없으면 운동 DB 기본값) */
+  coachingCues?: string[];
   created_at?: string;
 }
 

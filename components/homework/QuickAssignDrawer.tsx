@@ -675,7 +675,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-black text-slate-900">오늘 낼 운동</span>
               <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-white">
-                {qa.selectedCards.length}/3
+                {qa.selectedCards.length}/{MAX_HOMEWORK_ITEMS}
               </span>
             </div>
             <span className="text-xs text-slate-400">좌우 [-/+] 세트 · 태그 탭</span>
@@ -784,7 +784,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
             </AnimatePresence>
 
             {/* 빈 슬롯 카드 */}
-            {qa.selectedCards.length < 3 && (
+            {qa.selectedCards.length < MAX_HOMEWORK_ITEMS && (
               <motion.div
                 layout
                 whileTap={{ scale: 0.96 }}
@@ -800,7 +800,7 @@ function QuickAssignBody({ open: _open, onOpenChange, ...params }: QuickAssignDr
                   <Plus className="size-4 text-slate-600" />
                 </div>
                 <span className="text-xs font-bold text-slate-600 mt-1">동작 추가</span>
-                <span className="text-[10px] text-slate-400">최대 3개</span>
+                <span className="text-[10px] text-slate-400">최대 {MAX_HOMEWORK_ITEMS}개</span>
               </motion.div>
             )}
           </div>

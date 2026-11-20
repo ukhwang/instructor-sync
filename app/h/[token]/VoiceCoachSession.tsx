@@ -2,11 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeCoachItem } from "@/lib/coach";
-import type { HomeworkItem } from "@/lib/types";
+import { resolveCoachingCues, isCoachingBeat, DEFAULT_COACHING_CUES } from "@/lib/voice-coach/coaching-cues";
+import {
+  loadCountAudio,
+  playCountAudio,
+  stopCountAudio,
+  type CountAudioBank,
+} from "@/lib/voice-coach/count-audio";
+import type { HomeworkItem, VoiceCoachSummary } from "@/lib/types";
 
 type BeepKind = "start" | "tick" | "rest" | "done";
 type CoachPhase = "ready" | "work" | "rest" | "prepare";
+type CountAudioStatus = "idle" | "loading" | "ready" | "unavailable";
 const SIDE_PREPARATION_SECONDS = 3;
+/** 코칭 멘트는 카운트 클립이 끝난 뒤에 말한다(두 소리가 겹치지 않게). */
+const COACHING_VOICE_DELAY_MS = 620;
+const COACHING_BADGE_MS = 2600;
 
 function cancelSpeech() {
   try {
@@ -75,6 +86,7 @@ function speakCue(text: string, cancelPending = true) {
 
 const KOREAN_REP_COUNTS = ["", "하나", "둘", "셋", "넷", "다섯", "여섯", "일곱", "여덟", "아홉", "열"];
 
+/** 카운트 오디오를 못 쓸 때만 쓰는 폴백. */
 function speakRepCount(count: number, cancelPending = false) {
   speakCue(KOREAN_REP_COUNTS[count] ?? String(count), cancelPending);
 }
@@ -106,11 +118,16 @@ export async function unlockAudioFromGesture(): Promise<AudioContext | null> {
   return ctx;
 }
 
+/** 음성 코치가 끝났을 때 회원 기록에 넘기는 요약. */
+export type { VoiceCoachSummary };
+
 interface VoiceCoachSessionProps {
   items: HomeworkItem[];
   audioCtx: AudioContext | null;
   onClose: () => void;
-  onFinished: () => void;
+  onFinished: (summary?: VoiceCoachSummary) => void;
+  /** 세트 1회 완료를 회원 기록으로 남길 때 (선택) */
+  onSetComplete?: (item: HomeworkItem, setNumber: number, totalSets: number) => void;
 }
 
 export function VoiceCoachSession({
@@ -118,6 +135,7 @@ export function VoiceCoachSession({
   audioCtx,
   onClose,
   onFinished,
+  onSetComplete,
 }: VoiceCoachSessionProps) {
   const coachItems = useMemo(() => items.map(normalizeCoachItem), [items]);
   const [itemIndex, setItemIndex] = useState(0);
@@ -129,6 +147,8 @@ export function VoiceCoachSession({
   const [needsResume, setNeedsResume] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [audioUnavailable, setAudioUnavailable] = useState(false);
+  const [coachCue, setCoachCue] = useState<string | null>(null);
+  const [countAudio, setCountAudio] = useState<CountAudioStatus>("idle");
 
   const pausedRef = useRef(false);
   const resumeAttemptRef = useRef(0);
@@ -142,6 +162,18 @@ export function VoiceCoachSession({
   const phaseRef = useRef<CoachPhase>("work");
   const displayRef = useRef(0);
 
+  // 0ms 카운트: 디코딩해 둔 AudioBuffer + 재생 중인 소스(일시정지 시 정지)
+  const bankRef = useRef<CountAudioBank>(new Map());
+  const countSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  // 코칭 멘트: 현재 동작의 멘트 목록, 재생 순서, 배지 표시 타이머
+  const cueListRef = useRef<string[]>([...DEFAULT_COACHING_CUES]);
+  const cueCursorRef = useRef(0);
+  const cueTimerRef = useRef<number | null>(null);
+  const cueVoiceTimerRef = useRef<number | null>(null);
+  // 회원 기록용 진행 상황
+  const completedSetsRef = useRef(0);
+  const completedItemsRef = useRef<string[]>([]);
+
   const item = coachItems[itemIndex];
   const totalSets = item?.target_sets ?? 3;
 
@@ -152,15 +184,72 @@ export function VoiceCoachSession({
     }
   }, []);
 
+  const clearCueTimers = useCallback(() => {
+    if (cueTimerRef.current !== null) {
+      window.clearTimeout(cueTimerRef.current);
+      cueTimerRef.current = null;
+    }
+    if (cueVoiceTimerRef.current !== null) {
+      window.clearTimeout(cueVoiceTimerRef.current);
+      cueVoiceTimerRef.current = null;
+    }
+  }, []);
+
+  const silenceCounts = useCallback(() => {
+    stopCountAudio(countSourcesRef.current);
+  }, []);
+
+  /** 카운트: 준비된 버퍼가 있으면 0ms 재생, 없으면 말하기 합성으로 폴백. */
+  const countRep = useCallback((rep: number) => {
+    const ctx = ctxRef.current;
+    if (ctx && ctx.state === "running") {
+      const sources = playCountAudio(ctx, bankRef.current, rep);
+      if (sources) {
+        countSourcesRef.current.push(...sources);
+        return;
+      }
+    }
+    speakRepCount(rep);
+  }, []);
+
+  /** 화면 중앙 코칭 배지 + (카운트와 겹치지 않게) 음성 큐. */
+  const showCoachingCue = useCallback((text: string | undefined, voiceDelayMs = COACHING_VOICE_DELAY_MS) => {
+    const cue = (text ?? "").trim();
+    if (!cue) return;
+    setCoachCue(cue);
+    if (cueTimerRef.current !== null) window.clearTimeout(cueTimerRef.current);
+    cueTimerRef.current = window.setTimeout(() => {
+      cueTimerRef.current = null;
+      setCoachCue(null);
+    }, COACHING_BADGE_MS);
+    if (cueVoiceTimerRef.current !== null) window.clearTimeout(cueVoiceTimerRef.current);
+    cueVoiceTimerRef.current = window.setTimeout(() => {
+      cueVoiceTimerRef.current = null;
+      if (pausedRef.current) return;
+      speakCue(cue, false);
+    }, voiceDelayMs);
+  }, []);
+
+  const nextCoachingCue = useCallback(() => {
+    const list = cueListRef.current;
+    if (list.length === 0) return undefined;
+    const cue = list[cueCursorRef.current % list.length];
+    cueCursorRef.current += 1;
+    return cue;
+  }, []);
+
   const pauseSession = useCallback(() => {
     pausedRef.current = true;
     resumeAttemptRef.current += 1;
     resumingRef.current = false;
     clearTimer();
+    clearCueTimers();
+    silenceCounts();
     cancelSpeech();
+    setCoachCue(null);
     setPaused(true);
     setResuming(false);
-  }, [clearTimer]);
+  }, [clearCueTimers, clearTimer, silenceCounts]);
 
   const resumeSession = async () => {
     if (resumingRef.current) return;
@@ -207,6 +296,7 @@ export function VoiceCoachSession({
       setSide(nextSide);
       setPhase("ready");
       setDisplay(0);
+      setCoachCue(null);
     },
     [coachItems]
   );
@@ -223,10 +313,18 @@ export function VoiceCoachSession({
       setSetIndex(setNo);
       setSide(nextSide);
       setPhase("work");
+
       const isNewItem = spokenItemRef.current !== idx;
+      if (isNewItem) {
+        cueListRef.current = resolveCoachingCues(current.cue, current.coachingCues);
+        cueCursorRef.current = 0;
+      }
+      const firstCue = cueListRef.current[0];
       if (isNewItem && !pausedRef.current) {
         spokenItemRef.current = idx;
-        speakCue(`${current.name}. ${current.cue}`);
+        // 동작 이름 + 첫 코칭 멘트까지만 말한다(긴 설명문은 화면에 둔다).
+        speakCue([current.name, firstCue].filter(Boolean).join(". "));
+        if (firstCue) showCoachingCue(firstCue, 1400);
       }
       if (!pausedRef.current) beep("start");
       if (current.effort_kind === "hold") {
@@ -236,16 +334,20 @@ export function VoiceCoachSession({
       } else {
         displayRef.current = 1;
         setDisplay(1);
-        if (!pausedRef.current) speakRepCount(1, !isNewItem);
+        // 첫 세트는 동작 소개가 끝날 때까지 카운트를 겹치지 않게 쉰다.
+        if (!pausedRef.current && !isNewItem) countRep(1);
       }
     },
-    [beep, coachItems]
+    [beep, coachItems, countRep, showCoachingCue]
   );
 
   const finishAll = useCallback(() => {
     pauseSession();
     beep("done");
-    onFinished();
+    onFinished({
+      itemIds: [...completedItemsRef.current],
+      sets: completedSetsRef.current,
+    });
   }, [beep, onFinished, pauseSession]);
 
   const advanceAfterWork = useCallback(() => {
@@ -270,7 +372,15 @@ export function VoiceCoachSession({
       return;
     }
 
-    const lastSet = setNo >= (current.target_sets || 3) - 1;
+    // 이번 세트는 끝났다 → 회원 기록으로 넘긴다.
+    const setsForItem = current.target_sets || 3;
+    completedSetsRef.current += 1;
+    onSetComplete?.(current, setNo + 1, setsForItem);
+    if (setNo + 1 >= setsForItem && !completedItemsRef.current.includes(current.id)) {
+      completedItemsRef.current.push(current.id);
+    }
+
+    const lastSet = setNo >= setsForItem - 1;
     if (!lastSet) {
       const rest = current.rest_seconds ?? 20;
       if (rest === 0) {
@@ -291,7 +401,7 @@ export function VoiceCoachSession({
       return;
     }
     finishAll();
-  }, [beep, coachItems, finishAll, stageWork]);
+  }, [beep, coachItems, finishAll, onSetComplete, stageWork]);
 
   const tick = useCallback(() => {
     if (pausedRef.current) return;
@@ -324,6 +434,10 @@ export function VoiceCoachSession({
     if (current.effort_kind === "hold") {
       const next = displayRef.current - 1;
       beep("tick");
+      if (next === 2) {
+        const cue = nextCoachingCue();
+        if (cue) showCoachingCue(cue, 220);
+      }
       if (next <= 0) {
         advanceAfterWork();
         return;
@@ -343,11 +457,34 @@ export function VoiceCoachSession({
     }
     displayRef.current = nextRep;
     setDisplay(nextRep);
-    speakRepCount(nextRep);
-  }, [advanceAfterWork, beep, coachItems, stageWork, startWork]);
+    countRep(nextRep);
+    if (isCoachingBeat(nextRep, reps)) {
+      const cue = nextCoachingCue();
+      if (cue) showCoachingCue(cue);
+    }
+  }, [advanceAfterWork, beep, coachItems, countRep, nextCoachingCue, showCoachingCue, stageWork, startWork]);
 
   useEffect(() => {
     ctxRef.current = audioCtx;
+  }, [audioCtx]);
+
+  // 카운트 클립은 한 번만 받아 두고, 이후 카운트는 메모리에서 바로 재생한다.
+  useEffect(() => {
+    let cancelled = false;
+    const ctx = audioCtx;
+    if (!ctx) {
+      countSourcesRef.current = [];
+      return;
+    }
+    setCountAudio("loading");
+    void loadCountAudio(ctx).then((bank) => {
+      if (cancelled) return;
+      bankRef.current = bank;
+      setCountAudio(bank.size > 0 ? "ready" : "unavailable");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [audioCtx]);
 
   useEffect(() => {
@@ -385,9 +522,11 @@ export function VoiceCoachSession({
       resumeAttemptRef.current += 1;
       resumingRef.current = false;
       clearTimer();
+      clearCueTimers();
+      silenceCounts();
       cancelSpeech();
     };
-  }, [clearTimer, pauseSession]);
+  }, [clearCueTimers, clearTimer, pauseSession, silenceCounts]);
 
   if (!item) return null;
 
@@ -424,7 +563,21 @@ export function VoiceCoachSession({
   return (
     <div className="fixed inset-0 z-50 bg-[#111111] text-white flex flex-col">
       <header className="px-4 py-3 border-b-2 border-white flex items-center justify-between">
-        <span className="font-mono text-xs font-black">음성 코치</span>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs font-black">음성 코치</span>
+          <span
+            className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/70"
+            role="status"
+          >
+            {countAudio === "ready"
+              ? "카운트 준비됨"
+              : countAudio === "loading"
+                ? "카운트 준비 중…"
+                : countAudio === "unavailable"
+                  ? "기본 음성 사용"
+                  : "카운트 확인 중"}
+          </span>
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -437,7 +590,7 @@ export function VoiceCoachSession({
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
+      <main className="relative flex-1 flex flex-col items-center justify-center px-6 text-center gap-4">
         <div className="font-mono text-xs font-bold tracking-widest text-neutral-400">
           동작 {itemIndex + 1} / {coachItems.length} · 세트 {setIndex + 1} / {totalSets}
           {sideLabel ? ` · ${sideLabel}` : ""}
@@ -459,6 +612,19 @@ export function VoiceCoachSession({
           ) : null}
           {phase === "prepare" ? (
             <div className="mt-2 text-sm font-bold text-neutral-400">반대쪽(오른쪽) 준비하세요</div>
+          ) : null}
+        </div>
+
+        {/* 코칭 멘트 배지: 카운트 사이에 원장님 코칭 포인트를 크게 보여준다 */}
+        <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center px-6">
+          {coachCue ? (
+            <span
+              role="status"
+              data-testid="coach-cue-badge"
+              className="max-w-full truncate rounded-full bg-yellow-400 px-5 py-2 text-base font-black text-black shadow-lg transition-opacity duration-200"
+            >
+              {coachCue}
+            </span>
           ) : null}
         </div>
 

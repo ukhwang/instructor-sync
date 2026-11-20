@@ -108,6 +108,24 @@ const MEDIA_BY_EXERCISE: Record<string, ExerciseMedia> = {
 };
 
 /**
+ * 운동명으로 운동 DB 의 기본 코칭 태그를 찾는다.
+ * 원장님이 코칭 태그를 고르지 않은 숙제에서 음성 코치 멘트로 쓴다.
+ * ("글루트 브릿지 (Glute Bridge)" → 괄호를 떼고 "글루트 브릿지"로 다시 찾는다)
+ */
+export function getExerciseCoachingTags(name: string): string[] {
+  const trimmed = name?.trim();
+  if (!trimmed) return [];
+  const candidates = [trimmed, trimmed.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()].filter(
+    (candidate, index, all) => candidate && all.indexOf(candidate) === index,
+  );
+  for (const candidate of candidates) {
+    const match = searchExercises(candidate, { limit: 1 })[0];
+    if (match && match.coachingTags.length > 0) return [...match.coachingTags];
+  }
+  return [];
+}
+
+/**
  * 운동명으로 등록된 GitHub 오픈소스 가이드 미디어 검색
  * 1. 정확한 매칭 우선
  * 2. 공백 제거 및 키워드 기반 스마트 매칭

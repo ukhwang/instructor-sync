@@ -3,6 +3,7 @@ import { ExerciseSnapshot, SeedExercise } from '@/lib/types';
 import type { ExerciseRecord } from '@/lib/exercises/types';
 import type { HomeworkPurpose } from '@/lib/homework-why';
 import { inferCoachFromRepsLabel, normalizeCoachItem } from '@/lib/coach';
+import { MAX_HOMEWORK_ITEMS } from '@/lib/homework-schemas';
 
 export interface DraftItem {
   exercise_snapshot?: ExerciseSnapshot | null;
@@ -95,7 +96,7 @@ export const useHomeworkDraftStore = create<HomeworkDraftState>((set, get) => ({
 
   addItem: (item) => {
     const current = get().items;
-    if (current.length >= 3) return false;
+    if (current.length >= MAX_HOMEWORK_ITEMS) return false;
     set({
       items: [
         ...current,
@@ -118,7 +119,7 @@ export const useHomeworkDraftStore = create<HomeworkDraftState>((set, get) => ({
       source_note: record.source_note ?? '기존 기본 운동 목록',
     } : null;
     const current = get().items;
-    if (current.length >= 3) return false;
+    if (current.length >= MAX_HOMEWORK_ITEMS) return false;
     // If the only item is empty, replace it
     if (current.length === 1 && !current[0].name.trim()) {
       set({

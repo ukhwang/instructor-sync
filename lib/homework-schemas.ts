@@ -24,8 +24,8 @@ export const customExerciseItemSchema = z.object({
 });
 export type CustomExerciseItem = z.infer<typeof customExerciseItemSchema>;
 
-/** create_homework RPC 계약: 숙제 1건당 동작 1~3개 */
-export const MAX_HOMEWORK_ITEMS = 3;
+/** create_homework RPC 계약: 숙제 1건당 동작 1~20개 */
+export const MAX_HOMEWORK_ITEMS = 20;
 
 export const assignHomeworkInputSchema = z
   .object({

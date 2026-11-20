@@ -1,12 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { CheckCircle2, Dumbbell, Loader2, Mic, RotateCcw, Square, WifiOff } from "lucide-react";
+import { CheckCircle2, Dumbbell, Loader2, Mic, RotateCcw, Square, Volume2, WifiOff } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { vibrate } from "@/lib/kakao-share";
-import { FEEDBACK_MOODS, PAIN_AREAS, type FeedbackMood, type Homework, type HomeworkItem, type Member, type PainArea } from "@/lib/types";
+import { FEEDBACK_MOODS, PAIN_AREAS, type FeedbackMood, type Homework, type HomeworkItem, type Member, type PainArea, type VoiceCoachSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { createRequestId } from "@/lib/homework-assignment";
+import { VoiceCoachSession, unlockAudioFromGesture } from "@/app/h/[token]/VoiceCoachSession";
 
 /* ────────────────────────────────────────────────────────────
  * 1. Zod Schemas (lib/homework-schemas 에서 일원화)
@@ -121,14 +122,17 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
   });
   const [now, setNow] = useState<number>(0);
   const { enqueue, flush, hasSyncError } = useSetLogQueue(onLogSet);
+  // 음성 코치로 마친 진행 상황을 최종 피드백 판정에 그대로 쓴다.
+  const [voiceSummary, setVoiceSummary] = useState<VoiceCoachSummary | null>(null);
 
   const currentItem: HomeworkItem | null = items[state.index] ?? null;
 
   const completedSets = useMemo<number>(() => {
+    if (voiceSummary) return Math.min(totalSets, Math.max(0, voiceSummary.sets));
     if (state.stage !== "workout") return totalSets;
     const before = sumSets(items.slice(0, state.index));
     return before + state.setIndex;
-  }, [items, state.index, state.setIndex, state.stage, totalSets]);
+  }, [items, state.index, state.setIndex, state.stage, totalSets, voiceSummary]);
 
   const completeSet = useCallback(() => {
     if (state.stage !== "workout" || state.phase.kind !== "exercise" || !currentItem) return;
@@ -176,6 +180,13 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
     setState((prev) => ({ ...prev, stage: "done" }));
   }, []);
 
+  /** 음성 코치 종료 → 마친 진행만큼으로 기록 화면에 넘긴다. */
+  const finishFromVoice = useCallback((summary: VoiceCoachSummary) => {
+    setVoiceSummary(summary);
+    vibrate([30, 40, 30]);
+    setState((prev) => ({ ...prev, stage: "feedback", phase: { kind: "exercise" } }));
+  }, []);
+
   useEffect(() => {
     if (state.phase.kind !== "rest") return;
     const endsAt = state.phase.endsAt;
@@ -199,9 +210,10 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
 
   /** 모든 세트를 끝낸 동작 id. 서버가 이 목록으로 완료/일부/못함을 판정한다. */
   const completedItemIds = useMemo<string[]>(() => {
+    if (voiceSummary) return voiceSummary.itemIds;
     const done = state.stage === "workout" ? items.slice(0, state.index) : items;
     return done.map((item) => item.id);
-  }, [items, state.index, state.stage]);
+  }, [items, state.index, state.stage, voiceSummary]);
 
   return {
     items,
@@ -213,6 +225,8 @@ export function useHomeworkSession(homework: Homework, onLogSet: (input: LogSetI
     completeSet,
     skipRest,
     finish,
+    finishFromVoice,
+    logSet: enqueue,
     restRemainingSec,
     restProgress,
     flushLogs: flush,
@@ -460,6 +474,33 @@ export function MemberHomeworkClient({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // 음성 코치: 버튼 탭(사용자 제스처)에서 오디오를 열고 카운트 클립을 미리 받는다.
+  const [voiceOpen, setVoiceOpen] = useState<boolean>(false);
+  const [voiceAudioCtx, setVoiceAudioCtx] = useState<AudioContext | null>(null);
+  const [voicePreparing, setVoicePreparing] = useState<boolean>(false);
+
+  const voiceCoachItems = useMemo<HomeworkItem[]>(() =>
+    session.items.map((item) => ({
+      ...item,
+      // VoiceCoachSession 은 target_reps(문장)로 회차/시간을 판단한다.
+      target_reps: item.target_reps ?? (item.reps != null ? `${item.reps}회` : "10회"),
+      target_sets: item.sets ?? 3,
+      rest_seconds: item.restSec ?? 20,
+    })), [session.items]);
+
+  const openVoiceCoach = async () => {
+    if (voicePreparing) return;
+    setVoicePreparing(true);
+    vibrate(12);
+    try {
+      const ctx = voiceAudioCtx ?? (await unlockAudioFromGesture());
+      setVoiceAudioCtx(ctx);
+      setVoiceOpen(true);
+    } finally {
+      setVoicePreparing(false);
+    }
+  };
+
   const progressPercent = session.totalSets > 0 ? Math.round((session.completedSets / session.totalSets) * 100) : 100;
 
   const handleSubmit = async () => {
@@ -544,6 +585,27 @@ export function MemberHomeworkClient({
               total={session.items.length}
               doneSets={session.state.setIndex}
             />
+
+            <button
+              type="button"
+              onClick={() => void openVoiceCoach()}
+              disabled={voicePreparing}
+              className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#3182F6]/30 bg-[#3182F6]/[0.06] px-4 py-3 text-left transition-transform duration-150 active:scale-[0.98]"
+            >
+              {voicePreparing ? (
+                <Loader2 className="size-5 shrink-0 animate-spin text-[#3182F6]" />
+              ) : (
+                <Volume2 className="size-5 shrink-0 text-[#3182F6]" />
+              )}
+              <span className="min-w-0">
+                <span className="block text-lg font-bold leading-tight text-[#3182F6]">
+                  {voicePreparing ? "소리 준비 중…" : "음성 코치로 시작하기"}
+                </span>
+                <span className="block text-sm font-medium text-slate-500">
+                  하나, 둘, 셋 자동 카운트와 코칭 멘트를 소리로 들으며 해요
+                </span>
+              </span>
+            </button>
 
             <div className="mt-auto pt-6">
               <AnimatePresence mode="wait" initial={false}>
@@ -731,6 +793,28 @@ export function MemberHomeworkClient({
           </motion.section>
         )}
       </AnimatePresence>
+
+      {voiceOpen && (
+        <VoiceCoachSession
+          items={voiceCoachItems}
+          audioCtx={voiceAudioCtx}
+          onSetComplete={(coachItem, setNumber, totalSets) => {
+            session.logSet({
+              token: homework.token,
+              homeworkId: homework.id,
+              itemId: coachItem.id,
+              setNumber,
+              totalSets,
+              completedAt: new Date().toISOString(),
+            });
+          }}
+          onClose={() => setVoiceOpen(false)}
+          onFinished={(summary) => {
+            setVoiceOpen(false);
+            session.finishFromVoice(summary ?? { itemIds: [], sets: 0 });
+          }}
+        />
+      )}
     </main>
   );
 }
